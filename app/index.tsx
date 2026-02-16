@@ -1,4 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { ArrowRight, Camera, Clock, MapPin, Shield } from "lucide-react-native";
 import React from "react";
 import {
@@ -20,9 +21,10 @@ const Colors = {
 
 export default function Index() {
   const insets = useSafeAreaInsets();
+  const router = useRouter(); // Initialize router
 
   const onGetStarted = () => {
-    console.log("Get Started Pressed");
+    router.replace("/dashboard");
   };
 
   return (

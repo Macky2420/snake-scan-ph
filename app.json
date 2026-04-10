@@ -50,7 +50,8 @@
           "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera to detect snakes."
         }
       ],
-      "react-native-fast-tflite"
+      "react-native-fast-tflite",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

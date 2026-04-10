@@ -1,22 +1,176 @@
+import { toByteArray } from "base64-js";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { Camera, Image as ImageIcon, X, Zap } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import * as SQLite from "expo-sqlite";
+import * as jpeg from "jpeg-js";
+import {
+  AlertOctagon,
+  AlertTriangle,
+  Brain,
+  Camera,
+  CheckCircle2,
+  ChevronRight,
+  Flashlight,
+  FlashlightOff,
+  Image as ImageIcon,
+  Info,
+  MapPin,
+  Microscope,
+  Shield,
+  Trees,
+  X,
+  XCircle,
+  Zap,
+} from "lucide-react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
+import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type ScanResult = {
+type FlashMode = "off" | "on" | "auto";
+
+type SnakeInfo = {
+  common_name: string;
+  scientific_name: string;
+  venom_type: string;
+  warning: string;
+  description: string;
+  traits: string[];
+  habitat: string;
+  behavior: string;
+  ecological_role: string;
+  safety: string[];
+};
+
+type ScanResult =
+  | {
+      status: "not_snake";
+      name: string;
+      venom_type: string;
+      confidence: number;
+    }
+  | {
+      status: "snake";
+      key: string;
+      name: string;
+      venom_type: string;
+      confidence: number;
+    };
+
+type ScanRecord = {
+  id: number;
+  timestamp: string;
+  latitude: number | null;
+  longitude: number | null;
+  imageUri: string;
+  status: "snake" | "not_snake";
+  snakeKey: string | null;
   name: string;
-  type: "venomous" | "non-venomous";
+  venomType: string;
   confidence: number;
+};
+
+const snakeInfoMap = require("../data/snake.json") as Record<string, SnakeInfo>;
+const CLASS_NAMES = Object.keys(snakeInfoMap);
+const IMG_SIZE = 224;
+const SNAKE_THRESHOLD = 0.6;
+
+// FIXED: Proper database singleton with initialization state
+let dbInstance: SQLite.SQLiteDatabase | null = null;
+let isDbInitializing = false;
+let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
+const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
+  // If already initialized, return instance
+  if (dbInstance) {
+    return dbInstance;
+  }
+
+  // If currently initializing, wait for it
+  if (isDbInitializing && dbInitPromise) {
+    return dbInitPromise;
+  }
+
+  // Start initialization
+  isDbInitializing = true;
+  dbInitPromise = (async () => {
+    try {
+      console.log("Initializing database...");
+      const db = await SQLite.openDatabaseAsync("snake_scans.db");
+
+      // Enable WAL mode for better performance
+      await db.execAsync("PRAGMA journal_mode = WAL;");
+
+      // Create table if not exists
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS scans (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          timestamp TEXT NOT NULL,
+          latitude REAL,
+          longitude REAL,
+          imageUri TEXT,
+          status TEXT NOT NULL,
+          snakeKey TEXT,
+          name TEXT NOT NULL,
+          venomType TEXT NOT NULL,
+          confidence REAL NOT NULL
+        );
+      `);
+
+      console.log("Database initialized successfully");
+      dbInstance = db;
+      return db;
+    } catch (error) {
+      console.error("Database initialization error:", error);
+      throw error;
+    } finally {
+      isDbInitializing = false;
+    }
+  })();
+
+  return dbInitPromise;
+};
+
+const saveScanToDatabase = async (
+  scanData: Omit<ScanRecord, "id" | "timestamp">,
+): Promise<void> => {
+  try {
+    const db = await initDatabase();
+    const timestamp = new Date().toISOString();
+
+    // Use runAsync with parameterized query to prevent SQL injection
+    await db.runAsync(
+      `INSERT INTO scans (timestamp, latitude, longitude, imageUri, status, snakeKey, name, venomType, confidence) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        timestamp,
+        scanData.latitude,
+        scanData.longitude,
+        scanData.imageUri,
+        scanData.status,
+        scanData.snakeKey,
+        scanData.name,
+        scanData.venomType,
+        scanData.confidence,
+      ],
+    );
+    console.log("Scan saved successfully at", timestamp);
+  } catch (error) {
+    console.error("Save to database error:", error);
+    // Don't throw - let the app continue even if save fails
+  }
 };
 
 export default function Scan() {
@@ -24,13 +178,42 @@ export default function Scan() {
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
+  const [locationPermission, setLocationPermission] = useState<boolean>(false);
+  const [currentLocation, setCurrentLocation] =
+    useState<Location.LocationObjectCoords | null>(null);
 
-  // State
+  // Flash state
+  const [flashMode, setFlashMode] = useState<FlashMode>("off");
+  const [torchEnabled, setTorchEnabled] = useState<boolean>(false);
+
+  const binaryPlugin = useTensorflowModel(
+    require("../data/snake_vs_not_snake.tflite"),
+  );
+
+  const classifierPlugin = useTensorflowModel(
+    require("../data/efficientnet_b0_quantized.tflite"),
+  );
+
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [currentImageUri, setCurrentImageUri] = useState<string>("");
   const [pulseAnim] = useState(new Animated.Value(1));
 
-  // Animation Effect
+  const modelsReady =
+    binaryPlugin.state === "loaded" && classifierPlugin.state === "loaded";
+
+  // Initialize database on mount
+  useEffect(() => {
+    initDatabase().catch(console.error);
+  }, []);
+
+  // Request location permission
+  useEffect(() => {
+    requestLocationPermission();
+  }, []);
+
+  // Pulse animation
   useEffect(() => {
     if (isScanning) {
       Animated.loop(
@@ -52,52 +235,408 @@ export default function Scan() {
     }
   }, [isScanning, pulseAnim]);
 
+  const requestLocationPermission = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status === "granted") {
+      setLocationPermission(true);
+      try {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.BestForNavigation,
+        });
+        setCurrentLocation(location.coords);
+      } catch (error) {
+        console.warn("Could not get initial location:", error);
+      }
+    }
+  };
+
+  const getCurrentLocation = async () => {
+    if (!locationPermission) return null;
+    try {
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
+      return location.coords;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  // Flash toggle function
+  const toggleFlash = useCallback(() => {
+    setFlashMode((prev) => {
+      if (prev === "off") {
+        setTorchEnabled(true);
+        return "on";
+      } else if (prev === "on") {
+        setTorchEnabled(false);
+        return "auto";
+      } else {
+        setTorchEnabled(false);
+        return "off";
+      }
+    });
+  }, []);
+
   const handleClose = () => {
     if (scanResult) {
       setScanResult(null);
+      setShowDetails(false);
+      setCurrentImageUri("");
     } else {
       router.back();
     }
   };
 
-  const simulateScan = () => {
+  const imageUriToInputTensor = async (uri: string) => {
+    const manipulated = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: IMG_SIZE, height: IMG_SIZE } }],
+      {
+        compress: 1,
+        format: ImageManipulator.SaveFormat.JPEG,
+        base64: true,
+      },
+    );
+
+    if (!manipulated.base64) {
+      throw new Error("Failed to convert image.");
+    }
+
+    const jpegBytes = toByteArray(manipulated.base64);
+    const decoded = jpeg.decode(jpegBytes, { useTArray: true });
+
+    if (!decoded?.data) {
+      throw new Error("Failed to decode image.");
+    }
+
+    const input = new Float32Array(IMG_SIZE * IMG_SIZE * 3);
+
+    let j = 0;
+    for (let i = 0; i < decoded.data.length; i += 4) {
+      input[j++] = decoded.data[i];
+      input[j++] = decoded.data[i + 1];
+      input[j++] = decoded.data[i + 2];
+    }
+
+    return input;
+  };
+
+  const analyzeImage = async (uri: string) => {
+    if (!modelsReady || !binaryPlugin.model || !classifierPlugin.model) {
+      throw new Error("Models not loaded.");
+    }
+
     setIsScanning(true);
-    setTimeout(() => {
-      setScanResult({
-        name: "Green Tree Python",
-        type: "non-venomous",
-        confidence: 96,
+    setScanResult(null);
+    setShowDetails(false);
+    setCurrentImageUri(uri);
+
+    try {
+      const coords = await getCurrentLocation();
+      if (coords) {
+        setCurrentLocation(coords);
+      }
+
+      const inputTensor = await imageUriToInputTensor(uri);
+      const binaryOutput = await binaryPlugin.model.run([inputTensor]);
+      const snakeProb = Number((binaryOutput[0] as Float32Array)[0]);
+
+      if (snakeProb <= SNAKE_THRESHOLD) {
+        const result: ScanResult = {
+          status: "not_snake",
+          name: "Not a Snake",
+          venom_type: "No Snake Detected",
+          confidence: Number(((1 - snakeProb) * 100).toFixed(2)),
+        };
+
+        setScanResult(result);
+
+        // Save to database (non-blocking)
+        saveScanToDatabase({
+          latitude: coords?.latitude ?? null,
+          longitude: coords?.longitude ?? null,
+          imageUri: uri,
+          status: "not_snake",
+          snakeKey: null,
+          name: result.name,
+          venomType: result.venom_type,
+          confidence: result.confidence,
+        });
+
+        return;
+      }
+
+      const classifierOutput = await classifierPlugin.model.run([inputTensor]);
+      const scores = Array.from(classifierOutput[0] as Float32Array);
+
+      let bestIndex = 0;
+      let bestScore = scores[0] ?? 0;
+
+      for (let i = 1; i < scores.length; i++) {
+        if (scores[i] > bestScore) {
+          bestScore = scores[i];
+          bestIndex = i;
+        }
+      }
+
+      const classKey = CLASS_NAMES[bestIndex];
+      const info = snakeInfoMap[classKey];
+
+      if (!info) {
+        throw new Error(`Missing snake info for class: ${classKey}`);
+      }
+
+      const result: ScanResult = {
+        status: "snake",
+        key: classKey,
+        name: info.common_name,
+        venom_type: info.venom_type,
+        confidence: Number((bestScore * 100).toFixed(2)),
+      };
+
+      setScanResult(result);
+
+      // Save to database (non-blocking)
+      saveScanToDatabase({
+        latitude: coords?.latitude ?? null,
+        longitude: coords?.longitude ?? null,
+        imageUri: uri,
+        status: "snake",
+        snakeKey: classKey,
+        name: result.name,
+        venomType: result.venom_type,
+        confidence: result.confidence,
       });
+    } catch (error) {
+      console.error("Inference error:", error);
+      const errorResult: ScanResult = {
+        status: "not_snake",
+        name: "Scan Failed",
+        venom_type: "Unknown",
+        confidence: 0,
+      };
+      setScanResult(errorResult);
+    } finally {
       setIsScanning(false);
-    }, 2500);
+    }
   };
 
   const handleCapture = async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || !modelsReady) return;
+
     try {
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.5,
-        skipProcessing: true,
+        quality: 0.8,
+        skipProcessing: false,
       });
-      console.log("Photo taken:", photo.uri);
-      simulateScan();
+
+      if (!photo?.uri) return;
+      await analyzeImage(photo.uri);
     } catch (e) {
       console.error("Camera error:", e);
     }
   };
 
   const handleUpload = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
+    if (!modelsReady) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsEditing: true,
-      aspect: [4, 3],
       quality: 1,
     });
 
-    if (!result.canceled) {
-      simulateScan();
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      await analyzeImage(result.assets[0].uri);
     }
   };
+
+  const getResultConfig = () => {
+    if (!scanResult) return null;
+
+    if (scanResult.status === "not_snake") {
+      return {
+        icon: XCircle,
+        color: "#6B7280",
+        bgColor: "#374151",
+        gradient: ["#374151", "#4B5563"],
+        statusText: "Not Detected",
+      };
+    }
+
+    if (scanResult.venom_type === "Non-venomous Snake") {
+      return {
+        icon: CheckCircle2,
+        color: "#059669",
+        bgColor: "#059669",
+        gradient: ["#059669", "#10B981"],
+        statusText: "Safe",
+      };
+    }
+
+    return {
+      icon: AlertTriangle,
+      color: "#DC2626",
+      bgColor: "#DC2626",
+      gradient: ["#DC2626", "#EF4444"],
+      statusText: "Dangerous",
+    };
+  };
+
+  const renderDetailsModal = () => {
+    if (!scanResult || scanResult.status !== "snake") return null;
+
+    const info = snakeInfoMap[scanResult.key];
+    if (!info) return null;
+
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showDetails}
+        onRequestClose={() => setShowDetails(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View
+            style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Species Details</Text>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setShowDetails(false)}
+              >
+                <X size={24} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={styles.modalScroll}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              <View
+                style={[
+                  styles.detailHeader,
+                  { borderLeftColor: getResultConfig()?.color },
+                ]}
+              >
+                <Text style={styles.detailScientific}>
+                  {info.scientific_name}
+                </Text>
+                <Text style={styles.detailCommon}>{info.common_name}</Text>
+                <View
+                  style={[
+                    styles.venomBadge,
+                    { backgroundColor: getResultConfig()?.bgColor },
+                  ]}
+                >
+                  <AlertOctagon size={14} color="#fff" />
+                  <Text style={styles.venomBadgeText}>{info.venom_type}</Text>
+                </View>
+              </View>
+
+              {info.warning && (
+                <View style={styles.warningBanner}>
+                  <AlertTriangle size={20} color="#FCA5A5" />
+                  <Text style={styles.warningText}>{info.warning}</Text>
+                </View>
+              )}
+
+              <View style={styles.detailSection}>
+                <View style={styles.sectionHeader}>
+                  <Microscope size={18} color="#34D399" />
+                  <Text style={styles.sectionTitle}>Description</Text>
+                </View>
+                <Text style={styles.sectionText}>{info.description}</Text>
+              </View>
+
+              <View style={styles.detailSection}>
+                <View style={styles.sectionHeader}>
+                  <Info size={18} color="#34D399" />
+                  <Text style={styles.sectionTitle}>Identifying Traits</Text>
+                </View>
+                {info.traits.map((trait, idx) => (
+                  <View key={idx} style={styles.traitItem}>
+                    <View style={styles.traitDot} />
+                    <Text style={styles.traitText}>{trait}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.detailSection}>
+                <View style={styles.sectionHeader}>
+                  <Trees size={18} color="#34D399" />
+                  <Text style={styles.sectionTitle}>Habitat</Text>
+                </View>
+                <Text style={styles.sectionText}>{info.habitat}</Text>
+              </View>
+
+              <View style={styles.detailSection}>
+                <View style={styles.sectionHeader}>
+                  <Brain size={18} color="#34D399" />
+                  <Text style={styles.sectionTitle}>Behavior</Text>
+                </View>
+                <Text style={styles.sectionText}>{info.behavior}</Text>
+              </View>
+
+              <View style={styles.detailSection}>
+                <View style={styles.sectionHeader}>
+                  <Shield size={18} color="#34D399" />
+                  <Text style={styles.sectionTitle}>Safety Guidelines</Text>
+                </View>
+                {info.safety.map((tip, idx) => (
+                  <View key={idx} style={styles.safetyItem}>
+                    <Text style={styles.safetyNumber}>{idx + 1}</Text>
+                    <Text style={styles.safetyText}>{tip}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={[styles.detailSection, styles.lastSection]}>
+                <View style={styles.sectionHeader}>
+                  <Trees size={18} color="#34D399" />
+                  <Text style={styles.sectionTitle}>Ecological Role</Text>
+                </View>
+                <Text style={styles.sectionText}>{info.ecological_role}</Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const config = getResultConfig();
+
+  // Get flash icon and color based on state
+  const getFlashConfig = () => {
+    if (torchEnabled || flashMode === "on") {
+      return {
+        icon: Flashlight,
+        color: "#FCD34D",
+        bgColor: "rgba(252, 211, 77, 0.2)",
+        label: "Torch",
+      };
+    }
+    if (flashMode === "auto") {
+      return {
+        icon: Zap,
+        color: "#34D399",
+        bgColor: "rgba(52, 211, 153, 0.2)",
+        label: "Auto",
+      };
+    }
+    return {
+      icon: FlashlightOff,
+      color: "#9CA3AF",
+      bgColor: "rgba(255, 255, 255, 0.1)",
+      label: "Flash",
+    };
+  };
+
+  const flashConfig = getFlashConfig();
 
   if (!permission) return <View style={styles.container} />;
 
@@ -127,19 +666,61 @@ export default function Scan() {
     );
   }
 
+  if (binaryPlugin.state === "error" || classifierPlugin.state === "error") {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.content, { paddingTop: insets.top }]}>
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={() => router.back()}
+          >
+            <X color="#fff" size={24} />
+          </TouchableOpacity>
+          <View style={styles.permissionContainer}>
+            <Text style={styles.permissionText}>
+              Failed to load TFLite models.
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* ✅ CameraView with NO children */}
-      <CameraView style={styles.camera} facing="back" ref={cameraRef} />
+      {/* Camera with flash props */}
+      <CameraView
+        style={styles.camera}
+        facing="back"
+        ref={cameraRef}
+        flash={flashMode}
+        enableTorch={torchEnabled}
+        active={true}
+      />
 
-      {/* ✅ Overlay positioned absolutely on top of CameraView */}
       <View style={styles.overlay}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <Text style={styles.headerTitle}>Scan Snake</Text>
-          <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
-            <X color="#fff" size={24} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <TouchableOpacity style={styles.iconBtn} onPress={() => {}}>
+              <MapPin
+                color={currentLocation ? "#34D399" : "#9CA3AF"}
+                size={20}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
+              <X color="#fff" size={24} />
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {!locationPermission && (
+          <View style={styles.locationWarning}>
+            <Text style={styles.locationWarningText}>
+              ⚠️ Location permission denied. Enable for geotagging.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.contentLayer}>
           {!scanResult && !isScanning && (
@@ -154,6 +735,17 @@ export default function Scan() {
                 <Text style={styles.instructionSub}>
                   Make sure the snake is clearly visible and well-lit
                 </Text>
+                {currentLocation && (
+                  <View style={styles.gpsBadge}>
+                    <MapPin size={12} color="#34D399" />
+                    <Text style={styles.gpsText}>GPS Active</Text>
+                  </View>
+                )}
+                {!modelsReady && (
+                  <Text style={[styles.instructionSub, { marginTop: 12 }]}>
+                    Loading AI models...
+                  </Text>
+                )}
               </View>
 
               <View style={styles.scanFrameContainer}>
@@ -182,71 +774,109 @@ export default function Scan() {
               />
               <Text style={styles.instructionTitle}>Analyzing...</Text>
               <Text style={styles.instructionSub}>
-                AI is identifying the snake species
+                AI is identifying the species
               </Text>
+              {currentLocation && (
+                <View style={styles.gpsBadge}>
+                  <MapPin size={12} color="#6EE7B7" />
+                  <Text style={styles.gpsText}>
+                    {currentLocation.latitude.toFixed(4)},{" "}
+                    {currentLocation.longitude.toFixed(4)}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
 
-          {scanResult && (
-            <View style={styles.resultContainer}>
+          {scanResult && config && (
+            <View style={styles.resultCard}>
               <View
                 style={[
-                  styles.resultIcon,
-                  {
-                    backgroundColor:
-                      scanResult.type === "venomous" ? "#DC2626" : "#059669",
-                  },
+                  styles.resultIconContainer,
+                  { backgroundColor: config.bgColor },
                 ]}
               >
-                <Text style={styles.resultEmoji}>
-                  {scanResult.type === "venomous" ? "⚠️" : "✓"}
-                </Text>
+                <config.icon size={40} color="#fff" strokeWidth={2} />
               </View>
 
               <Text style={styles.resultName}>{scanResult.name}</Text>
 
               <View
                 style={[
-                  styles.badge,
-                  {
-                    backgroundColor:
-                      scanResult.type === "venomous"
-                        ? "rgba(220, 38, 38, 0.2)"
-                        : "rgba(5, 150, 105, 0.2)",
-                  },
+                  styles.statusBadge,
+                  { backgroundColor: `${config.color}20` },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.badgeText,
-                    {
-                      color:
-                        scanResult.type === "venomous" ? "#FCA5A5" : "#6EE7B7",
-                    },
-                  ]}
-                >
-                  {scanResult.type === "venomous" ? "Venomous" : "Non-venomous"}
+                <View
+                  style={[styles.statusDot, { backgroundColor: config.color }]}
+                />
+                <Text style={[styles.statusText, { color: config.color }]}>
+                  {scanResult.status === "not_snake"
+                    ? "Not a Snake"
+                    : config.statusText}
                 </Text>
               </View>
 
-              <Text style={styles.confidenceText}>
-                Confidence: {scanResult.confidence}%
-              </Text>
+              <View style={styles.confidenceContainer}>
+                <View style={styles.confidenceHeader}>
+                  <Text style={styles.confidenceLabel}>AI Confidence</Text>
+                  <Text
+                    style={[styles.confidenceValue, { color: config.color }]}
+                  >
+                    {scanResult.confidence}%
+                  </Text>
+                </View>
+                <View style={styles.confidenceBarBg}>
+                  <View
+                    style={[
+                      styles.confidenceBarFill,
+                      {
+                        width: `${scanResult.confidence}%`,
+                        backgroundColor: config.color,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
 
-              {scanResult.type === "venomous" && (
-                <View style={styles.warningBox}>
-                  <Text style={styles.warningText}>
-                    ⚠️ Warning: Keep a safe distance. This snake is venomous!
+              {currentLocation && scanResult.status === "snake" && (
+                <View style={styles.locationTag}>
+                  <MapPin size={14} color="#9CA3AF" />
+                  <Text style={styles.locationTagText}>
+                    {currentLocation.latitude.toFixed(5)},{" "}
+                    {currentLocation.longitude.toFixed(5)}
                   </Text>
                 </View>
               )}
 
-              <TouchableOpacity
-                style={styles.viewDetailsBtn}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.viewDetailsBtnText}>View Details</Text>
-              </TouchableOpacity>
+              <View style={styles.actionButtons}>
+                {scanResult.status === "snake" && (
+                  <TouchableOpacity
+                    style={[
+                      styles.viewDetailsBtn,
+                      { backgroundColor: config.color },
+                    ]}
+                    onPress={() => setShowDetails(true)}
+                  >
+                    <Info size={18} color="#fff" />
+                    <Text style={styles.viewDetailsText}>
+                      View Species Details
+                    </Text>
+                    <ChevronRight size={18} color="#fff" />
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity
+                  style={styles.scanAgainBtn}
+                  onPress={() => {
+                    setScanResult(null);
+                    setShowDetails(false);
+                  }}
+                >
+                  <Camera size={18} color="#fff" />
+                  <Text style={styles.scanAgainText}>Scan Another</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           )}
         </View>
@@ -255,14 +885,22 @@ export default function Scan() {
           <View
             style={[styles.controls, { paddingBottom: insets.bottom + 20 }]}
           >
-            <TouchableOpacity style={styles.controlBtn} onPress={handleUpload}>
+            <TouchableOpacity
+              style={styles.controlBtn}
+              onPress={handleUpload}
+              disabled={!modelsReady}
+            >
               <View style={styles.controlCircleSmall}>
                 <ImageIcon size={22} color="#fff" />
               </View>
               <Text style={styles.controlLabel}>Gallery</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.controlBtn} onPress={handleCapture}>
+            <TouchableOpacity
+              style={styles.controlBtn}
+              onPress={handleCapture}
+              disabled={!modelsReady}
+            >
               <View style={styles.captureBtn}>
                 <Camera size={28} color="#fff" />
               </View>
@@ -271,15 +909,29 @@ export default function Scan() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.controlBtn}>
-              <View style={styles.controlCircleSmall}>
-                <Zap size={22} color="#fff" />
+            {/* Working Flash Button */}
+            <TouchableOpacity
+              style={styles.controlBtn}
+              onPress={toggleFlash}
+              activeOpacity={0.7}
+            >
+              <View
+                style={[
+                  styles.controlCircleSmall,
+                  { backgroundColor: flashConfig.bgColor },
+                ]}
+              >
+                <flashConfig.icon size={22} color={flashConfig.color} />
               </View>
-              <Text style={styles.controlLabel}>Flash</Text>
+              <Text style={[styles.controlLabel, { color: flashConfig.color }]}>
+                {flashConfig.label}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
       </View>
+
+      {renderDetailsModal()}
     </View>
   );
 }
@@ -296,14 +948,13 @@ const styles = StyleSheet.create({
   camera: {
     flex: 1,
   },
-  // ✅ Overlay positioned absolutely to cover the camera
   overlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: "rgba(0,0,0,0.3)",
   },
   header: {
     flexDirection: "row",
@@ -313,14 +964,23 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 20,
-    fontWeight: "bold",
+    fontWeight: "700",
     color: "#fff",
+    letterSpacing: 0.5,
   },
   closeBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.1)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -338,28 +998,49 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: "rgba(5, 150, 105, 0.2)",
+    backgroundColor: "rgba(52, 211, 153, 0.15)",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(52, 211, 153, 0.3)",
   },
   instructionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
+    fontSize: 22,
+    fontWeight: "700",
     color: "#fff",
     marginBottom: 8,
+    letterSpacing: 0.3,
   },
   instructionSub: {
     fontSize: 14,
     color: "#9CA3AF",
     textAlign: "center",
     maxWidth: 280,
+    lineHeight: 20,
+  },
+  gpsBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(52, 211, 153, 0.15)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 12,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "rgba(52, 211, 153, 0.3)",
+  },
+  gpsText: {
+    color: "#34D399",
+    fontSize: 12,
+    fontWeight: "600",
   },
   scanFrameContainer: {
     position: "absolute",
-    width: 300,
+    width: 280,
     height: 280,
-    marginBottom: 200,
+    marginBottom: 180,
   },
   cornerTL: {
     position: "absolute",
@@ -367,10 +1048,10 @@ const styles = StyleSheet.create({
     left: 0,
     width: 40,
     height: 40,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
     borderColor: "#34D399",
-    borderTopLeftRadius: 20,
+    borderTopLeftRadius: 24,
   },
   cornerTR: {
     position: "absolute",
@@ -378,10 +1059,10 @@ const styles = StyleSheet.create({
     right: 0,
     width: 40,
     height: 40,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
     borderColor: "#34D399",
-    borderTopRightRadius: 20,
+    borderTopRightRadius: 24,
   },
   cornerBL: {
     position: "absolute",
@@ -389,10 +1070,10 @@ const styles = StyleSheet.create({
     left: 0,
     width: 40,
     height: 40,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
     borderColor: "#34D399",
-    borderBottomLeftRadius: 20,
+    borderBottomLeftRadius: 24,
   },
   cornerBR: {
     position: "absolute",
@@ -400,10 +1081,10 @@ const styles = StyleSheet.create({
     right: 0,
     width: 40,
     height: 40,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
     borderColor: "#34D399",
-    borderBottomRightRadius: 20,
+    borderBottomRightRadius: 24,
   },
   controls: {
     position: "absolute",
@@ -414,7 +1095,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     alignItems: "center",
     paddingTop: 20,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   controlBtn: {
     alignItems: "center",
@@ -427,84 +1108,344 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
   },
   captureBtn: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: "#059669",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 8,
     shadowColor: "#059669",
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.3)",
   },
   controlLabel: {
     color: "#fff",
     fontSize: 12,
+    fontWeight: "500",
   },
-  resultContainer: {
+  resultCard: {
     width: "100%",
+    backgroundColor: "rgba(17, 24, 39, 0.95)",
+    borderRadius: 24,
+    padding: 24,
     alignItems: "center",
-    paddingHorizontal: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 10,
   },
-  resultIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  resultIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 20,
-  },
-  resultEmoji: {
-    fontSize: 50,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   resultName: {
-    fontSize: 28,
-    fontWeight: "bold",
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#fff",
+    marginBottom: 8,
+    textAlign: "center",
+    letterSpacing: 0.3,
+  },
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 20,
+    gap: 6,
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  statusText: {
+    fontSize: 13,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  confidenceContainer: {
+    width: "100%",
+    marginBottom: 16,
+  },
+  confidenceHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  confidenceLabel: {
+    color: "#9CA3AF",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  confidenceValue: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  confidenceBarBg: {
+    height: 6,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  confidenceBarFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  locationTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(52, 211, 153, 0.1)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    gap: 6,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "rgba(52, 211, 153, 0.2)",
+  },
+  locationTagText: {
+    color: "#9CA3AF",
+    fontSize: 12,
+    fontFamily: "monospace",
+  },
+  actionButtons: {
+    width: "100%",
+    gap: 10,
+  },
+  viewDetailsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  viewDetailsText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  scanAgainBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    gap: 8,
+  },
+  scanAgainText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#111827",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: "85%",
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.1)",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  modalCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalScroll: {
+    padding: 20,
+  },
+  detailHeader: {
+    backgroundColor: "rgba(255,255,255,0.05)",
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+  },
+  detailScientific: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    fontStyle: "italic",
+    marginBottom: 4,
+    fontFamily: "serif",
+  },
+  detailCommon: {
+    fontSize: 24,
+    fontWeight: "800",
     color: "#fff",
     marginBottom: 12,
   },
-  badge: {
-    paddingHorizontal: 16,
+  venomBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    marginBottom: 12,
+    gap: 6,
   },
-  badgeText: {
-    fontSize: 14,
-    fontWeight: "600",
+  venomBadgeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    textTransform: "uppercase",
   },
-  confidenceText: {
-    color: "#9CA3AF",
-    marginBottom: 24,
-  },
-  warningBox: {
-    backgroundColor: "rgba(220, 38, 38, 0.2)",
-    borderColor: "rgba(220, 38, 38, 0.4)",
-    borderWidth: 1,
-    borderRadius: 16,
+  warningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(220, 38, 38, 0.15)",
     padding: 16,
-    marginBottom: 24,
-    width: "100%",
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(220, 38, 38, 0.3)",
   },
   warningText: {
     color: "#FCA5A5",
-    textAlign: "center",
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: "600",
+    flex: 1,
+    lineHeight: 20,
   },
-  viewDetailsBtn: {
-    backgroundColor: "#059669",
-    width: "100%",
-    paddingVertical: 16,
-    borderRadius: 16,
+  detailSection: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  lastSection: {
+    marginBottom: 0,
+  },
+  sectionHeader: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+    marginBottom: 10,
   },
-  viewDetailsBtnText: {
-    color: "#fff",
-    fontWeight: "bold",
+  sectionTitle: {
     fontSize: 16,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  sectionText: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    lineHeight: 22,
+  },
+  traitItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+    gap: 10,
+  },
+  traitDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#34D399",
+    marginTop: 7,
+  },
+  traitText: {
+    fontSize: 14,
+    color: "#D1D5DB",
+    flex: 1,
+    lineHeight: 20,
+  },
+  safetyItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 10,
+    gap: 10,
+  },
+  safetyNumber: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(52, 211, 153, 0.2)",
+    color: "#34D399",
+    fontSize: 12,
+    fontWeight: "700",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  safetyText: {
+    fontSize: 14,
+    color: "#D1D5DB",
+    flex: 1,
+    lineHeight: 20,
+    paddingTop: 2,
+  },
+  locationWarning: {
+    backgroundColor: "rgba(220, 38, 38, 0.15)",
+    marginHorizontal: 20,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(220, 38, 38, 0.3)",
+  },
+  locationWarningText: {
+    color: "#FCA5A5",
+    fontSize: 12,
+    fontWeight: "500",
   },
   permissionContainer: {
     flex: 1,
@@ -515,15 +1456,21 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginBottom: 20,
     textAlign: "center",
+    fontSize: 16,
   },
   permissionBtn: {
     backgroundColor: "#059669",
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    shadowColor: "#059669",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   permissionBtnText: {
     color: "#fff",
-    fontWeight: "bold",
+    fontWeight: "700",
+    fontSize: 15,
   },
 });

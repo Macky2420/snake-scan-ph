@@ -51,7 +51,21 @@
         }
       ],
       "react-native-fast-tflite",
-      "expo-sqlite"
+      [
+        "expo-sqlite",
+        {
+          "enableFTS": true,
+          "useSQLCipher": false,
+          "android": {
+            "enableFTS": false,
+            "useSQLCipher": false
+          },
+          "ios": {
+            "enableFTS": false,
+            "useSQLCipher": false
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

@@ -4,7 +4,6 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import * as SQLite from "expo-sqlite";
 import * as jpeg from "jpeg-js";
 import {
   AlertOctagon,
@@ -34,10 +33,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { useTensorflowModel } from "react-native-fast-tflite";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { initDatabase, insertScan } from "../data/sqlite";
 
 type FlashMode = "off" | "on" | "auto";
 
@@ -69,122 +69,23 @@ type ScanResult =
       confidence: number;
     };
 
-type ScanRecord = {
-  id: number;
-  timestamp: string;
-  latitude: number | null;
-  longitude: number | null;
-  imageUri: string;
-  status: "snake" | "not_snake";
-  snakeKey: string | null;
-  name: string;
-  venomType: string;
-  confidence: number;
-};
-
 const snakeInfoMap = require("../data/snake.json") as Record<string, SnakeInfo>;
 const CLASS_NAMES = Object.keys(snakeInfoMap);
 const IMG_SIZE = 224;
 const SNAKE_THRESHOLD = 0.6;
 
-// FIXED: Proper database singleton with initialization state
-let dbInstance: SQLite.SQLiteDatabase | null = null;
-let isDbInitializing = false;
-let dbInitPromise: Promise<SQLite.SQLiteDatabase> | null = null;
-
-const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
-  // If already initialized, return instance
-  if (dbInstance) {
-    return dbInstance;
-  }
-
-  // If currently initializing, wait for it
-  if (isDbInitializing && dbInitPromise) {
-    return dbInitPromise;
-  }
-
-  // Start initialization
-  isDbInitializing = true;
-  dbInitPromise = (async () => {
-    try {
-      console.log("Initializing database...");
-      const db = await SQLite.openDatabaseAsync("snake_scans.db");
-
-      // Enable WAL mode for better performance
-      await db.execAsync("PRAGMA journal_mode = WAL;");
-
-      // Create table if not exists
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS scans (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          timestamp TEXT NOT NULL,
-          latitude REAL,
-          longitude REAL,
-          imageUri TEXT,
-          status TEXT NOT NULL,
-          snakeKey TEXT,
-          name TEXT NOT NULL,
-          venomType TEXT NOT NULL,
-          confidence REAL NOT NULL
-        );
-      `);
-
-      console.log("Database initialized successfully");
-      dbInstance = db;
-      return db;
-    } catch (error) {
-      console.error("Database initialization error:", error);
-      throw error;
-    } finally {
-      isDbInitializing = false;
-    }
-  })();
-
-  return dbInitPromise;
-};
-
-const saveScanToDatabase = async (
-  scanData: Omit<ScanRecord, "id" | "timestamp">,
-): Promise<void> => {
-  try {
-    const db = await initDatabase();
-    const timestamp = new Date().toISOString();
-
-    // Use runAsync with parameterized query to prevent SQL injection
-    await db.runAsync(
-      `INSERT INTO scans (timestamp, latitude, longitude, imageUri, status, snakeKey, name, venomType, confidence) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        timestamp,
-        scanData.latitude,
-        scanData.longitude,
-        scanData.imageUri,
-        scanData.status,
-        scanData.snakeKey,
-        scanData.name,
-        scanData.venomType,
-        scanData.confidence,
-      ],
-    );
-    console.log("Scan saved successfully at", timestamp);
-  } catch (error) {
-    console.error("Save to database error:", error);
-    // Don't throw - let the app continue even if save fails
-  }
-};
-
 export default function Scan() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
+
   const [permission, requestPermission] = useCameraPermissions();
-  const [locationPermission, setLocationPermission] = useState<boolean>(false);
+  const [locationPermission, setLocationPermission] = useState(false);
   const [currentLocation, setCurrentLocation] =
     useState<Location.LocationObjectCoords | null>(null);
 
-  // Flash state
   const [flashMode, setFlashMode] = useState<FlashMode>("off");
-  const [torchEnabled, setTorchEnabled] = useState<boolean>(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
 
   const binaryPlugin = useTensorflowModel(
     require("../data/snake_vs_not_snake.tflite"),
@@ -197,26 +98,25 @@ export default function Scan() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [showDetails, setShowDetails] = useState(false);
-  const [currentImageUri, setCurrentImageUri] = useState<string>("");
+  const [currentImageUri, setCurrentImageUri] = useState("");
   const [pulseAnim] = useState(new Animated.Value(1));
 
   const modelsReady =
     binaryPlugin.state === "loaded" && classifierPlugin.state === "loaded";
 
-  // Initialize database on mount
   useEffect(() => {
-    initDatabase().catch(console.error);
+    initDatabase().catch((error) => {
+      console.error("Database init error:", error);
+    });
   }, []);
 
-  // Request location permission
   useEffect(() => {
     requestLocationPermission();
   }, []);
 
-  // Pulse animation
   useEffect(() => {
     if (isScanning) {
-      Animated.loop(
+      const animation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
             toValue: 1.1,
@@ -229,40 +129,56 @@ export default function Scan() {
             useNativeDriver: true,
           }),
         ]),
-      ).start();
+      );
+
+      animation.start();
+
+      return () => {
+        animation.stop();
+      };
     } else {
       pulseAnim.setValue(1);
     }
   }, [isScanning, pulseAnim]);
 
   const requestLocationPermission = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === "granted") {
-      setLocationPermission(true);
-      try {
-        const location = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.BestForNavigation,
-        });
-        setCurrentLocation(location.coords);
-      } catch (error) {
-        console.warn("Could not get initial location:", error);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status === "granted") {
+        setLocationPermission(true);
+
+        try {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.BestForNavigation,
+          });
+          setCurrentLocation(location.coords);
+        } catch (error) {
+          console.warn("Could not get initial location:", error);
+        }
+      } else {
+        setLocationPermission(false);
       }
+    } catch (error) {
+      console.warn("Location permission request failed:", error);
+      setLocationPermission(false);
     }
   };
 
   const getCurrentLocation = async () => {
     if (!locationPermission) return null;
+
     try {
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.BestForNavigation,
       });
       return location.coords;
     } catch (error) {
+      console.warn("Could not get current location:", error);
       return null;
     }
   };
 
-  // Flash toggle function
   const toggleFlash = useCallback(() => {
     setFlashMode((prev) => {
       if (prev === "off") {
@@ -324,7 +240,8 @@ export default function Scan() {
 
   const analyzeImage = async (uri: string) => {
     if (!modelsReady || !binaryPlugin.model || !classifierPlugin.model) {
-      throw new Error("Models not loaded.");
+      console.error("SCAN: models not loaded");
+      return;
     }
 
     setIsScanning(true);
@@ -333,16 +250,39 @@ export default function Scan() {
     setCurrentImageUri(uri);
 
     try {
+      console.log("SCAN: start");
+      console.log("SCAN: uri =", uri);
+
       const coords = await getCurrentLocation();
       if (coords) {
         setCurrentLocation(coords);
       }
 
+      console.log("SCAN: converting image");
       const inputTensor = await imageUriToInputTensor(uri);
+      console.log("SCAN: tensor size =", inputTensor.length);
+
+      console.log("SCAN: running binary model");
       const binaryOutput = await binaryPlugin.model.run([inputTensor]);
-      const snakeProb = Number((binaryOutput[0] as Float32Array)[0]);
+      console.log("SCAN: binaryOutput =", binaryOutput);
+
+      const binaryArray = binaryOutput?.[0] as Float32Array | undefined;
+
+      if (!binaryArray || binaryArray.length === 0) {
+        throw new Error("Binary model returned empty output");
+      }
+
+      const snakeProb = Number(binaryArray[0]);
+
+      if (Number.isNaN(snakeProb)) {
+        throw new Error("Binary model returned NaN");
+      }
+
+      console.log("SCAN: snakeProb =", snakeProb);
 
       if (snakeProb <= SNAKE_THRESHOLD) {
+        console.log("SCAN: not snake, skipping database save");
+
         const result: ScanResult = {
           status: "not_snake",
           name: "Not a Snake",
@@ -351,31 +291,27 @@ export default function Scan() {
         };
 
         setScanResult(result);
-
-        // Save to database (non-blocking)
-        saveScanToDatabase({
-          latitude: coords?.latitude ?? null,
-          longitude: coords?.longitude ?? null,
-          imageUri: uri,
-          status: "not_snake",
-          snakeKey: null,
-          name: result.name,
-          venomType: result.venom_type,
-          confidence: result.confidence,
-        });
-
         return;
       }
 
+      console.log("SCAN: running classifier");
       const classifierOutput = await classifierPlugin.model.run([inputTensor]);
-      const scores = Array.from(classifierOutput[0] as Float32Array);
+      console.log("SCAN: classifierOutput =", classifierOutput);
+
+      const classArray = classifierOutput?.[0] as Float32Array | undefined;
+
+      if (!classArray || classArray.length === 0) {
+        throw new Error("Classifier model returned empty output");
+      }
+
+      const scores = Array.from(classArray);
 
       let bestIndex = 0;
       let bestScore = scores[0] ?? 0;
 
       for (let i = 1; i < scores.length; i++) {
-        if (scores[i] > bestScore) {
-          bestScore = scores[i];
+        if ((scores[i] ?? 0) > bestScore) {
+          bestScore = scores[i] ?? 0;
           bestIndex = i;
         }
       }
@@ -397,8 +333,8 @@ export default function Scan() {
 
       setScanResult(result);
 
-      // Save to database (non-blocking)
-      saveScanToDatabase({
+      console.log("SCAN: saving snake to database");
+      await insertScan({
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
         imageUri: uri,
@@ -408,14 +344,17 @@ export default function Scan() {
         venomType: result.venom_type,
         confidence: result.confidence,
       });
+      console.log("SCAN: save done");
     } catch (error) {
-      console.error("Inference error:", error);
+      console.error("SCAN ERROR:", error);
+
       const errorResult: ScanResult = {
         status: "not_snake",
         name: "Scan Failed",
         venom_type: "Unknown",
         confidence: 0,
       };
+
       setScanResult(errorResult);
     } finally {
       setIsScanning(false);
@@ -432,23 +371,28 @@ export default function Scan() {
       });
 
       if (!photo?.uri) return;
+
       await analyzeImage(photo.uri);
-    } catch (e) {
-      console.error("Camera error:", e);
+    } catch (error) {
+      console.error("Camera error:", error);
     }
   };
 
   const handleUpload = async () => {
     if (!modelsReady) return;
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      quality: 1,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: true,
+        quality: 1,
+      });
 
-    if (!result.canceled && result.assets?.[0]?.uri) {
-      await analyzeImage(result.assets[0].uri);
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        await analyzeImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
     }
   };
 
@@ -493,7 +437,7 @@ export default function Scan() {
     return (
       <Modal
         animationType="slide"
-        transparent={true}
+        transparent
         visible={showDetails}
         onRequestClose={() => setShowDetails(false)}
       >
@@ -526,6 +470,7 @@ export default function Scan() {
                   {info.scientific_name}
                 </Text>
                 <Text style={styles.detailCommon}>{info.common_name}</Text>
+
                 <View
                   style={[
                     styles.venomBadge,
@@ -537,12 +482,12 @@ export default function Scan() {
                 </View>
               </View>
 
-              {info.warning && (
+              {info.warning ? (
                 <View style={styles.warningBanner}>
                   <AlertTriangle size={20} color="#FCA5A5" />
                   <Text style={styles.warningText}>{info.warning}</Text>
                 </View>
-              )}
+              ) : null}
 
               <View style={styles.detailSection}>
                 <View style={styles.sectionHeader}>
@@ -610,7 +555,6 @@ export default function Scan() {
 
   const config = getResultConfig();
 
-  // Get flash icon and color based on state
   const getFlashConfig = () => {
     if (torchEnabled || flashMode === "on") {
       return {
@@ -620,6 +564,7 @@ export default function Scan() {
         label: "Torch",
       };
     }
+
     if (flashMode === "auto") {
       return {
         icon: Zap,
@@ -628,6 +573,7 @@ export default function Scan() {
         label: "Auto",
       };
     }
+
     return {
       icon: FlashlightOff,
       color: "#9CA3AF",
@@ -638,7 +584,9 @@ export default function Scan() {
 
   const flashConfig = getFlashConfig();
 
-  if (!permission) return <View style={styles.container} />;
+  if (!permission) {
+    return <View style={styles.container} />;
+  }
 
   if (!permission.granted) {
     return (
@@ -650,10 +598,12 @@ export default function Scan() {
           >
             <X color="#fff" size={24} />
           </TouchableOpacity>
+
           <View style={styles.permissionContainer}>
             <Text style={styles.permissionText}>
               Camera permission is required to scan snakes.
             </Text>
+
             <TouchableOpacity
               style={styles.permissionBtn}
               onPress={requestPermission}
@@ -676,6 +626,7 @@ export default function Scan() {
           >
             <X color="#fff" size={24} />
           </TouchableOpacity>
+
           <View style={styles.permissionContainer}>
             <Text style={styles.permissionText}>
               Failed to load TFLite models.
@@ -688,7 +639,6 @@ export default function Scan() {
 
   return (
     <View style={styles.container}>
-      {/* Camera with flash props */}
       <CameraView
         style={styles.camera}
         facing="back"
@@ -701,6 +651,7 @@ export default function Scan() {
       <View style={styles.overlay}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <Text style={styles.headerTitle}>Scan Snake</Text>
+
           <View style={{ flexDirection: "row", gap: 10 }}>
             <TouchableOpacity style={styles.iconBtn} onPress={() => {}}>
               <MapPin
@@ -708,44 +659,49 @@ export default function Scan() {
                 size={20}
               />
             </TouchableOpacity>
+
             <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
               <X color="#fff" size={24} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {!locationPermission && (
+        {!locationPermission ? (
           <View style={styles.locationWarning}>
             <Text style={styles.locationWarningText}>
               ⚠️ Location permission denied. Enable for geotagging.
             </Text>
           </View>
-        )}
+        ) : null}
 
         <View style={styles.contentLayer}>
-          {!scanResult && !isScanning && (
+          {!scanResult && !isScanning ? (
             <>
               <View style={styles.placeholderContainer}>
                 <View style={styles.iconCircle}>
                   <Camera size={40} color="#34D399" />
                 </View>
+
                 <Text style={styles.instructionTitle}>
                   Position the snake in frame
                 </Text>
+
                 <Text style={styles.instructionSub}>
                   Make sure the snake is clearly visible and well-lit
                 </Text>
-                {currentLocation && (
+
+                {currentLocation ? (
                   <View style={styles.gpsBadge}>
                     <MapPin size={12} color="#34D399" />
                     <Text style={styles.gpsText}>GPS Active</Text>
                   </View>
-                )}
-                {!modelsReady && (
+                ) : null}
+
+                {!modelsReady ? (
                   <Text style={[styles.instructionSub, { marginTop: 12 }]}>
                     Loading AI models...
                   </Text>
-                )}
+                ) : null}
               </View>
 
               <View style={styles.scanFrameContainer}>
@@ -755,9 +711,9 @@ export default function Scan() {
                 <View style={styles.cornerBR} />
               </View>
             </>
-          )}
+          ) : null}
 
-          {isScanning && (
+          {isScanning ? (
             <View style={styles.placeholderContainer}>
               <Animated.View
                 style={[
@@ -767,16 +723,19 @@ export default function Scan() {
               >
                 <Zap size={40} color="#34D399" />
               </Animated.View>
+
               <ActivityIndicator
                 size="large"
                 color="#34D399"
                 style={{ marginTop: 20 }}
               />
+
               <Text style={styles.instructionTitle}>Analyzing...</Text>
               <Text style={styles.instructionSub}>
                 AI is identifying the species
               </Text>
-              {currentLocation && (
+
+              {currentLocation ? (
                 <View style={styles.gpsBadge}>
                   <MapPin size={12} color="#6EE7B7" />
                   <Text style={styles.gpsText}>
@@ -784,11 +743,11 @@ export default function Scan() {
                     {currentLocation.longitude.toFixed(4)}
                   </Text>
                 </View>
-              )}
+              ) : null}
             </View>
-          )}
+          ) : null}
 
-          {scanResult && config && (
+          {scanResult && config ? (
             <View style={styles.resultCard}>
               <View
                 style={[
@@ -826,6 +785,7 @@ export default function Scan() {
                     {scanResult.confidence}%
                   </Text>
                 </View>
+
                 <View style={styles.confidenceBarBg}>
                   <View
                     style={[
@@ -839,7 +799,7 @@ export default function Scan() {
                 </View>
               </View>
 
-              {currentLocation && scanResult.status === "snake" && (
+              {currentLocation && scanResult.status === "snake" ? (
                 <View style={styles.locationTag}>
                   <MapPin size={14} color="#9CA3AF" />
                   <Text style={styles.locationTagText}>
@@ -847,10 +807,10 @@ export default function Scan() {
                     {currentLocation.longitude.toFixed(5)}
                   </Text>
                 </View>
-              )}
+              ) : null}
 
               <View style={styles.actionButtons}>
-                {scanResult.status === "snake" && (
+                {scanResult.status === "snake" ? (
                   <TouchableOpacity
                     style={[
                       styles.viewDetailsBtn,
@@ -864,13 +824,14 @@ export default function Scan() {
                     </Text>
                     <ChevronRight size={18} color="#fff" />
                   </TouchableOpacity>
-                )}
+                ) : null}
 
                 <TouchableOpacity
                   style={styles.scanAgainBtn}
                   onPress={() => {
                     setScanResult(null);
                     setShowDetails(false);
+                    setCurrentImageUri("");
                   }}
                 >
                   <Camera size={18} color="#fff" />
@@ -878,10 +839,10 @@ export default function Scan() {
                 </TouchableOpacity>
               </View>
             </View>
-          )}
+          ) : null}
         </View>
 
-        {!scanResult && !isScanning && (
+        {!scanResult && !isScanning ? (
           <View
             style={[styles.controls, { paddingBottom: insets.bottom + 20 }]}
           >
@@ -909,7 +870,6 @@ export default function Scan() {
               </Text>
             </TouchableOpacity>
 
-            {/* Working Flash Button */}
             <TouchableOpacity
               style={styles.controlBtn}
               onPress={toggleFlash}
@@ -928,7 +888,7 @@ export default function Scan() {
               </Text>
             </TouchableOpacity>
           </View>
-        )}
+        ) : null}
       </View>
 
       {renderDetailsModal()}

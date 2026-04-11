@@ -1,17 +1,21 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-// Keep this import, it now works because we created the file above
 import {
   AlertTriangle,
   Camera,
   ChevronRight,
+  History,
+  Map as MapIcon,
   MapPin,
-  Settings as SettingsIcon,
   ShieldCheck,
+  Trash2,
 } from "lucide-react-native";
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Image,
+  RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -19,41 +23,144 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { RectButton } from "react-native-gesture-handler";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { mockScans, SnakeScan } from "../data/snake";
+import { deleteScan, getAllScans, type ScanRecord } from "../data/sqlite";
 
-// --- REMOVE THE TYPE AND DATA ARRAY FROM HERE ---
-// They are now imported from "../data/snake"
-
-// --- Component ---
 export default function Dashboard() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  // Calculate counts from the imported data
-  const venomousCount = mockScans.filter((s) => s.type === "venomous").length;
-  const nonVenomousCount = mockScans.filter(
-    (s) => s.type === "non-venomous",
+  const [scans, setScans] = useState<ScanRecord[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const isLoadingRef = useRef(false);
+
+  const loadScans = useCallback(async (showLoader = true) => {
+    if (isLoadingRef.current) return;
+
+    console.log("DASHBOARD: loadScans called, showLoader =", showLoader);
+    isLoadingRef.current = true;
+
+    if (showLoader) {
+      setIsLoading(true);
+    }
+
+    try {
+      const data = await getAllScans();
+      console.log("DASHBOARD: loaded scans =", data.length);
+      setScans(data);
+    } catch (error) {
+      console.error("DASHBOARD: load scans error =", error);
+      setScans([]);
+    } finally {
+      isLoadingRef.current = false;
+      setIsLoading(false);
+      console.log("DASHBOARD: loadScans finished");
+    }
+  }, []);
+
+  useEffect(() => {
+    loadScans(true);
+  }, [loadScans]);
+
+  useFocusEffect(
+    useCallback(() => {
+      console.log("DASHBOARD: screen focused → reload scans");
+      loadScans(false);
+    }, [loadScans]),
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadScans(false);
+    setRefreshing(false);
+  };
+
+  const handleDeleteScan = (scan: ScanRecord) => {
+    Alert.alert("Delete Scan", `Delete "${scan.name}" from recent scans?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteScan(scan.id);
+            setScans((prev) => prev.filter((item) => item.id !== scan.id));
+          } catch (error) {
+            console.error("DASHBOARD: delete scan error =", error);
+            Alert.alert("Error", "Failed to delete scan.");
+          }
+        },
+      },
+    ]);
+  };
+
+  const venomousCount = scans.filter(
+    (s) =>
+      s.venomType.toLowerCase().includes("venomous") &&
+      !s.venomType.toLowerCase().includes("non"),
   ).length;
 
-  const onViewSnake = (snake: SnakeScan) => {
-    // Navigate to detail screen
-    router.push(`/snake/${snake.id}`);
+  const nonVenomousCount = scans.filter(
+    (s) =>
+      s.venomType.toLowerCase().includes("non-venomous") ||
+      s.status === "not_snake",
+  ).length;
+
+  const onViewSnake = (scan: ScanRecord) => {
+    router.push({
+      pathname: "/snake/[id]",
+      params: {
+        id: scan.id.toString(),
+        data: JSON.stringify(scan),
+      },
+    });
   };
 
   const onOpenScan = () => {
     router.push("/scan");
   };
 
-  const onOpenSettings = () => {
-    console.log("Open Settings");
+  const onOpenMap = () => {
+    router.push("/map");
+  };
+
+  const formatTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    if (days < 7) return `${days}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const formatCoordinates = (lat: number | null, lon: number | null) => {
+    if (lat == null || lon == null) return "No location";
+    return `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  };
+
+  const renderRightActions = () => {
+    return (
+      <RectButton style={styles.deleteAction}>
+        <Trash2 size={22} color="#fff" />
+        <Text style={styles.deleteText}>Delete</Text>
+      </RectButton>
+    );
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* 1. HEADER */}
       <LinearGradient
         colors={["#059669", "#0d9488"]}
         style={[
@@ -68,11 +175,9 @@ export default function Dashboard() {
             <Text style={styles.headerTitle}>Dashboard</Text>
             <Text style={styles.headerSubtitle}>Scan History</Text>
           </View>
-          <TouchableOpacity
-            onPress={onOpenSettings}
-            style={styles.settingsButton}
-          >
-            <SettingsIcon size={20} color="#fff" />
+
+          <TouchableOpacity onPress={onOpenMap} style={styles.settingsButton}>
+            <MapIcon size={20} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -95,7 +200,6 @@ export default function Dashboard() {
         </View>
       </LinearGradient>
 
-      {/* 2. LIST */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -106,65 +210,120 @@ export default function Dashboard() {
           },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#059669"
+            colors={["#059669"]}
+          />
+        }
       >
         <View style={styles.listInnerContainer}>
-          <Text style={styles.listTitle}>Recent Scans</Text>
-          {mockScans.map((scan) => (
-            <TouchableOpacity
-              key={scan.id}
-              style={styles.card}
-              onPress={() => onViewSnake(scan)}
-              activeOpacity={0.7}
-            >
-              <Image source={{ uri: scan.image }} style={styles.cardImage} />
+          <View style={styles.listHeaderRow}>
+            <Text style={styles.listTitle}>Recent Scans</Text>
+            <Text style={styles.scanCount}>{scans.length} total</Text>
+          </View>
 
-              <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>{scan.name}</Text>
-                <Text style={styles.cardSubtitle}>{scan.scientificName}</Text>
+          {isLoading ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptySubtitle}>Loading scans...</Text>
+            </View>
+          ) : scans.length === 0 ? (
+            <View style={styles.emptyState}>
+              <History size={48} color="#9CA3AF" />
+              <Text style={styles.emptyTitle}>No Scans Yet</Text>
+              <Text style={styles.emptySubtitle}>
+                Tap the button below to scan your first snake
+              </Text>
+            </View>
+          ) : (
+            scans.map((scan) => (
+              <Swipeable
+                key={scan.id}
+                renderRightActions={renderRightActions}
+                onSwipeableOpen={() => handleDeleteScan(scan)}
+                overshootRight={false}
+              >
+                <TouchableOpacity
+                  style={styles.card}
+                  onPress={() => onViewSnake(scan)}
+                  activeOpacity={0.7}
+                >
+                  <Image
+                    source={{ uri: scan.imageUri }}
+                    style={styles.cardImage}
+                    resizeMode="cover"
+                  />
 
-                <View style={styles.locationRow}>
-                  <MapPin size={12} color="#6B7280" />
-                  <Text style={styles.locationText}>{scan.location}</Text>
-                </View>
-
-                <View style={styles.cardFooter}>
-                  <View
-                    style={[
-                      styles.badge,
-                      {
-                        backgroundColor:
-                          scan.type === "venomous" ? "#FEE2E2" : "#D1FAE5",
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.badgeText,
-                        {
-                          color:
-                            scan.type === "venomous" ? "#991B1B" : "#065F46",
-                        },
-                      ]}
-                    >
-                      {scan.type === "venomous"
-                        ? "⚠️ Venomous"
-                        : "✓ Non-venomous"}
+                  <View style={styles.cardContent}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>
+                      {scan.name}
                     </Text>
-                  </View>
-                  <Text style={styles.confidenceText}>{scan.confidence}%</Text>
-                </View>
-              </View>
+                    <Text style={styles.cardSubtitle}>{scan.venomType}</Text>
 
-              <View style={styles.cardRight}>
-                <Text style={styles.timeText}>{scan.time}</Text>
-                <ChevronRight size={20} color="#9CA3AF" />
-              </View>
-            </TouchableOpacity>
-          ))}
+                    <View style={styles.locationRow}>
+                      <MapPin size={12} color="#6B7280" />
+                      <Text style={styles.locationText} numberOfLines={1}>
+                        {formatCoordinates(scan.latitude, scan.longitude)}
+                      </Text>
+                    </View>
+
+                    <View style={styles.cardFooter}>
+                      <View
+                        style={[
+                          styles.badge,
+                          {
+                            backgroundColor:
+                              scan.venomType
+                                .toLowerCase()
+                                .includes("venomous") &&
+                              !scan.venomType.toLowerCase().includes("non")
+                                ? "#FEE2E2"
+                                : "#D1FAE5",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.badgeText,
+                            {
+                              color:
+                                scan.venomType
+                                  .toLowerCase()
+                                  .includes("venomous") &&
+                                !scan.venomType.toLowerCase().includes("non")
+                                  ? "#991B1B"
+                                  : "#065F46",
+                            },
+                          ]}
+                        >
+                          {scan.venomType.toLowerCase().includes("venomous") &&
+                          !scan.venomType.toLowerCase().includes("non")
+                            ? "⚠️ Venomous"
+                            : "✓ Safe"}
+                        </Text>
+                      </View>
+
+                      <Text style={styles.confidenceText}>
+                        {scan.confidence.toFixed(1)}%
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.cardRight}>
+                    <Text style={styles.timeText}>
+                      {formatTime(scan.timestamp)}
+                    </Text>
+                    <ChevronRight size={20} color="#9CA3AF" />
+                  </View>
+                </TouchableOpacity>
+              </Swipeable>
+            ))
+          )}
         </View>
       </ScrollView>
 
-      {/* 3. BUTTON */}
       <View
         style={[
           styles.bottomButtonContainer,
@@ -184,9 +343,7 @@ export default function Dashboard() {
   );
 }
 
-// Styles remain the same...
 const styles = StyleSheet.create({
-  // ... (Keep your existing styles here)
   container: {
     flex: 1,
     backgroundColor: "#F9FAFB",
@@ -267,12 +424,40 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 10,
     elevation: 5,
+    minHeight: 400,
+  },
+  listHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
   },
   listTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: "#111827",
-    marginBottom: 16,
+  },
+  scanCount: {
+    fontSize: 14,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#374151",
+    marginTop: 16,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#9CA3AF",
+    marginTop: 8,
+    textAlign: "center",
   },
   card: {
     flexDirection: "row",
@@ -317,6 +502,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#6B7280",
     marginLeft: 4,
+    fontFamily: "monospace",
+    flex: 1,
   },
   cardFooter: {
     flexDirection: "row",
@@ -345,6 +532,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     marginBottom: 4,
+  },
+  deleteAction: {
+    width: 88,
+    marginBottom: 12,
+    borderRadius: 20,
+    backgroundColor: "#DC2626",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  deleteText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 4,
   },
   bottomButtonContainer: {
     position: "absolute",

@@ -17,6 +17,7 @@ export default function RootLayout() {
         <Stack.Screen name="dashboard" />
         <Stack.Screen name="scan" />
         <Stack.Screen name="map" />
+        <Stack.Screen name="about" />
       </Stack>
     </GestureHandlerRootView>
   );

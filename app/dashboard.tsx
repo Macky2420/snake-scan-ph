@@ -6,6 +6,7 @@ import {
   Camera,
   ChevronRight,
   History,
+  Info,
   Map as MapIcon,
   MapPin,
   ShieldCheck,
@@ -128,6 +129,10 @@ export default function Dashboard() {
     router.push("/map");
   };
 
+  const onOpenAbout = () => {
+    router.push("/about");
+  };
+
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     const now = new Date();
@@ -176,9 +181,15 @@ export default function Dashboard() {
             <Text style={styles.headerSubtitle}>Scan History</Text>
           </View>
 
-          <TouchableOpacity onPress={onOpenMap} style={styles.settingsButton}>
-            <MapIcon size={20} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={onOpenMap} style={styles.iconButton}>
+              <MapIcon size={20} color="#fff" />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={onOpenAbout} style={styles.iconButton}>
+              <Info size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.statsContainer}>
@@ -374,13 +385,18 @@ const styles = StyleSheet.create({
     color: "#D1FAE5",
     marginTop: 2,
   },
-  settingsButton: {
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
     backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: 10,
   },
   statsContainer: {
     flexDirection: "row",

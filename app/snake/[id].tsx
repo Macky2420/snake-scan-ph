@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 20,
     backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 20,
+    borderRadius: 12,
     padding: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },

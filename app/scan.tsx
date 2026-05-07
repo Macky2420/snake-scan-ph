@@ -56,7 +56,7 @@ type SnakeInfo = {
 
 type ScanResult =
   | {
-      status: "not_snake";
+      status: "low_confidence";
       name: string;
       venom_type: string;
       confidence: number;
@@ -70,6 +70,7 @@ type ScanResult =
     };
 
 const snakeInfoMap = require("../data/snake.json") as Record<string, SnakeInfo>;
+
 const CLASS_NAMES = Object.keys(snakeInfoMap);
 const IMG_SIZE = 224;
 const SNAKE_THRESHOLD = 0.6;
@@ -136,9 +137,9 @@ export default function Scan() {
       return () => {
         animation.stop();
       };
-    } else {
-      pulseAnim.setValue(1);
     }
+
+    pulseAnim.setValue(1);
   }, [isScanning, pulseAnim]);
 
   const requestLocationPermission = async () => {
@@ -152,6 +153,7 @@ export default function Scan() {
           const location = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.BestForNavigation,
           });
+
           setCurrentLocation(location.coords);
         } catch (error) {
           console.warn("Could not get initial location:", error);
@@ -172,6 +174,7 @@ export default function Scan() {
       const location = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.BestForNavigation,
       });
+
       return location.coords;
     } catch (error) {
       console.warn("Could not get current location:", error);
@@ -184,13 +187,15 @@ export default function Scan() {
       if (prev === "off") {
         setTorchEnabled(true);
         return "on";
-      } else if (prev === "on") {
+      }
+
+      if (prev === "on") {
         setTorchEnabled(false);
         return "auto";
-      } else {
-        setTorchEnabled(false);
-        return "off";
       }
+
+      setTorchEnabled(false);
+      return "off";
     });
   }, []);
 
@@ -229,6 +234,7 @@ export default function Scan() {
     const input = new Float32Array(IMG_SIZE * IMG_SIZE * 3);
 
     let j = 0;
+
     for (let i = 0; i < decoded.data.length; i += 4) {
       input[j++] = decoded.data[i];
       input[j++] = decoded.data[i + 1];
@@ -254,16 +260,19 @@ export default function Scan() {
       console.log("SCAN: uri =", uri);
 
       const coords = await getCurrentLocation();
+
       if (coords) {
         setCurrentLocation(coords);
       }
 
       console.log("SCAN: converting image");
       const inputTensor = await imageUriToInputTensor(uri);
+
       console.log("SCAN: tensor size =", inputTensor.length);
 
       console.log("SCAN: running binary model");
       const binaryOutput = await binaryPlugin.model.run([inputTensor]);
+
       console.log("SCAN: binaryOutput =", binaryOutput);
 
       const binaryArray = binaryOutput?.[0] as Float32Array | undefined;
@@ -281,21 +290,22 @@ export default function Scan() {
       console.log("SCAN: snakeProb =", snakeProb);
 
       if (snakeProb <= SNAKE_THRESHOLD) {
-        console.log("SCAN: not snake, skipping database save");
+        console.log("SCAN: low confidence, skipping database save");
 
         const result: ScanResult = {
-          status: "not_snake",
-          name: "Not a Snake",
-          venom_type: "No Snake Detected",
-          confidence: Number(((1 - snakeProb) * 100).toFixed(2)),
+          status: "low_confidence",
+          name: "Sorry, the confidence is very low.",
+          venom_type: "Please scan a clearer snake image.",
+          confidence: Number((snakeProb * 100).toFixed(2)),
         };
 
         setScanResult(result);
         return;
       }
 
-      console.log("SCAN: running classifier");
+      console.log("SCAN: running classifier internally");
       const classifierOutput = await classifierPlugin.model.run([inputTensor]);
+
       console.log("SCAN: classifierOutput =", classifierOutput);
 
       const classArray = classifierOutput?.[0] as Float32Array | undefined;
@@ -323,10 +333,14 @@ export default function Scan() {
         throw new Error(`Missing snake info for class: ${classKey}`);
       }
 
+      const isNonVenomous = info.venom_type
+        .toLowerCase()
+        .includes("non-venomous");
+
       const result: ScanResult = {
         status: "snake",
         key: classKey,
-        name: info.common_name,
+        name: isNonVenomous ? "Non-venomous Snake" : "Venomous Snake",
         venom_type: info.venom_type,
         confidence: Number((bestScore * 100).toFixed(2)),
       };
@@ -334,6 +348,7 @@ export default function Scan() {
       setScanResult(result);
 
       console.log("SCAN: saving snake to database");
+
       await insertScan({
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
@@ -344,14 +359,15 @@ export default function Scan() {
         venomType: result.venom_type,
         confidence: result.confidence,
       });
+
       console.log("SCAN: save done");
     } catch (error) {
       console.error("SCAN ERROR:", error);
 
       const errorResult: ScanResult = {
-        status: "not_snake",
-        name: "Scan Failed",
-        venom_type: "Unknown",
+        status: "low_confidence",
+        name: "Scan failed.",
+        venom_type: "Please try again with a clearer image.",
         confidence: 0,
       };
 
@@ -399,23 +415,21 @@ export default function Scan() {
   const getResultConfig = () => {
     if (!scanResult) return null;
 
-    if (scanResult.status === "not_snake") {
+    if (scanResult.status === "low_confidence") {
       return {
         icon: XCircle,
         color: "#6B7280",
         bgColor: "#374151",
-        gradient: ["#374151", "#4B5563"],
-        statusText: "Not Detected",
+        statusText: "Low Confidence",
       };
     }
 
-    if (scanResult.venom_type === "Non-venomous Snake") {
+    if (scanResult.name === "Non-venomous Snake") {
       return {
         icon: CheckCircle2,
         color: "#059669",
         bgColor: "#059669",
-        gradient: ["#059669", "#10B981"],
-        statusText: "Safe",
+        statusText: "Non-venomous",
       };
     }
 
@@ -423,8 +437,7 @@ export default function Scan() {
       icon: AlertTriangle,
       color: "#DC2626",
       bgColor: "#DC2626",
-      gradient: ["#DC2626", "#EF4444"],
-      statusText: "Dangerous",
+      statusText: "Venomous",
     };
   };
 
@@ -432,6 +445,7 @@ export default function Scan() {
     if (!scanResult || scanResult.status !== "snake") return null;
 
     const info = snakeInfoMap[scanResult.key];
+
     if (!info) return null;
 
     return (
@@ -446,7 +460,8 @@ export default function Scan() {
             style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}
           >
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Species Details</Text>
+              <Text style={styles.modalTitle}>Snake Information</Text>
+
               <TouchableOpacity
                 style={styles.modalCloseBtn}
                 onPress={() => setShowDetails(false)}
@@ -466,10 +481,7 @@ export default function Scan() {
                   { borderLeftColor: getResultConfig()?.color },
                 ]}
               >
-                <Text style={styles.detailScientific}>
-                  {info.scientific_name}
-                </Text>
-                <Text style={styles.detailCommon}>{info.common_name}</Text>
+                <Text style={styles.detailCommon}>{scanResult.name}</Text>
 
                 <View
                   style={[
@@ -494,6 +506,7 @@ export default function Scan() {
                   <Microscope size={18} color="#34D399" />
                   <Text style={styles.sectionTitle}>Description</Text>
                 </View>
+
                 <Text style={styles.sectionText}>{info.description}</Text>
               </View>
 
@@ -502,6 +515,7 @@ export default function Scan() {
                   <Info size={18} color="#34D399" />
                   <Text style={styles.sectionTitle}>Identifying Traits</Text>
                 </View>
+
                 {info.traits.map((trait, idx) => (
                   <View key={idx} style={styles.traitItem}>
                     <View style={styles.traitDot} />
@@ -515,6 +529,7 @@ export default function Scan() {
                   <Trees size={18} color="#34D399" />
                   <Text style={styles.sectionTitle}>Habitat</Text>
                 </View>
+
                 <Text style={styles.sectionText}>{info.habitat}</Text>
               </View>
 
@@ -523,6 +538,7 @@ export default function Scan() {
                   <Brain size={18} color="#34D399" />
                   <Text style={styles.sectionTitle}>Behavior</Text>
                 </View>
+
                 <Text style={styles.sectionText}>{info.behavior}</Text>
               </View>
 
@@ -531,6 +547,7 @@ export default function Scan() {
                   <Shield size={18} color="#34D399" />
                   <Text style={styles.sectionTitle}>Safety Guidelines</Text>
                 </View>
+
                 {info.safety.map((tip, idx) => (
                   <View key={idx} style={styles.safetyItem}>
                     <Text style={styles.safetyNumber}>{idx + 1}</Text>
@@ -544,6 +561,7 @@ export default function Scan() {
                   <Trees size={18} color="#34D399" />
                   <Text style={styles.sectionTitle}>Ecological Role</Text>
                 </View>
+
                 <Text style={styles.sectionText}>{info.ecological_role}</Text>
               </View>
             </ScrollView>
@@ -687,7 +705,7 @@ export default function Scan() {
                 </Text>
 
                 <Text style={styles.instructionSub}>
-                  Make sure the snake is clearly visible and well-lit
+                  Make sure the snake is clearly visible and well-lit.
                 </Text>
 
                 {currentLocation ? (
@@ -731,13 +749,15 @@ export default function Scan() {
               />
 
               <Text style={styles.instructionTitle}>Analyzing...</Text>
+
               <Text style={styles.instructionSub}>
-                AI is identifying the species
+                AI is checking whether the image contains a snake.
               </Text>
 
               {currentLocation ? (
                 <View style={styles.gpsBadge}>
                   <MapPin size={12} color="#6EE7B7" />
+
                   <Text style={styles.gpsText}>
                     {currentLocation.latitude.toFixed(4)},{" "}
                     {currentLocation.longitude.toFixed(4)}
@@ -769,16 +789,16 @@ export default function Scan() {
                 <View
                   style={[styles.statusDot, { backgroundColor: config.color }]}
                 />
+
                 <Text style={[styles.statusText, { color: config.color }]}>
-                  {scanResult.status === "not_snake"
-                    ? "Not a Snake"
-                    : config.statusText}
+                  {config.statusText}
                 </Text>
               </View>
 
               <View style={styles.confidenceContainer}>
                 <View style={styles.confidenceHeader}>
                   <Text style={styles.confidenceLabel}>AI Confidence</Text>
+
                   <Text
                     style={[styles.confidenceValue, { color: config.color }]}
                   >
@@ -791,7 +811,7 @@ export default function Scan() {
                     style={[
                       styles.confidenceBarFill,
                       {
-                        width: `${scanResult.confidence}%`,
+                        width: `${Math.min(scanResult.confidence, 100)}%`,
                         backgroundColor: config.color,
                       },
                     ]}
@@ -799,9 +819,14 @@ export default function Scan() {
                 </View>
               </View>
 
+              <Text style={styles.resultDescription}>
+                {scanResult.venom_type}
+              </Text>
+
               {currentLocation && scanResult.status === "snake" ? (
                 <View style={styles.locationTag}>
                   <MapPin size={14} color="#9CA3AF" />
+
                   <Text style={styles.locationTagText}>
                     {currentLocation.latitude.toFixed(5)},{" "}
                     {currentLocation.longitude.toFixed(5)}
@@ -819,9 +844,11 @@ export default function Scan() {
                     onPress={() => setShowDetails(true)}
                   >
                     <Info size={18} color="#fff" />
+
                     <Text style={styles.viewDetailsText}>
-                      View Species Details
+                      View Snake Information
                     </Text>
+
                     <ChevronRight size={18} color="#fff" />
                   </TouchableOpacity>
                 ) : null}
@@ -854,6 +881,7 @@ export default function Scan() {
               <View style={styles.controlCircleSmall}>
                 <ImageIcon size={22} color="#fff" />
               </View>
+
               <Text style={styles.controlLabel}>Gallery</Text>
             </TouchableOpacity>
 
@@ -865,6 +893,7 @@ export default function Scan() {
               <View style={styles.captureBtn}>
                 <Camera size={28} color="#fff" />
               </View>
+
               <Text style={[styles.controlLabel, { fontWeight: "bold" }]}>
                 Capture
               </Text>
@@ -883,6 +912,7 @@ export default function Scan() {
               >
                 <flashConfig.icon size={22} color={flashConfig.color} />
               </View>
+
               <Text style={[styles.controlLabel, { color: flashConfig.color }]}>
                 {flashConfig.label}
               </Text>
@@ -971,6 +1001,7 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginBottom: 8,
     letterSpacing: 0.3,
+    textAlign: "center",
   },
   instructionSub: {
     fontSize: 14,
@@ -1127,6 +1158,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     letterSpacing: 0.3,
   },
+  resultDescription: {
+    color: "#D1D5DB",
+    fontSize: 14,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 16,
+  },
   statusBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1275,13 +1313,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginBottom: 16,
     borderLeftWidth: 4,
-  },
-  detailScientific: {
-    fontSize: 14,
-    color: "#9CA3AF",
-    fontStyle: "italic",
-    marginBottom: 4,
-    fontFamily: "serif",
   },
   detailCommon: {
     fontSize: 24,

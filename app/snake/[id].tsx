@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   Brain,
+  Info,
   MapPin,
   Microscope,
   Shield,
@@ -36,10 +37,27 @@ type ScanRecord = {
   confidence: number;
 };
 
+type IdentificationInfo = {
+  primary_color: string;
+  secondary_color: string;
+  head_shape: string;
+  pupil_shape: string;
+  scale_texture: string;
+  body_shape: string;
+  body_length: string;
+  tail_characteristics: string;
+  pattern: string;
+  eye_size: string;
+  distinct_features: string[];
+};
+
 type SnakeInfo = {
   common_name: string;
   scientific_name: string;
   venom_type: string;
+  medical_importance?: string;
+  confidence_note?: string;
+  identification?: IdentificationInfo;
   warning: string;
   description: string;
   traits: string[];
@@ -55,10 +73,7 @@ const snakeInfoMap = require("../../data/snake.json") as Record<
 >;
 
 export default function SnakeDetailScreen() {
-  const { id, data } = useLocalSearchParams<{
-    id?: string;
-    data?: string;
-  }>();
+  const { data } = useLocalSearchParams<{ id?: string; data?: string }>();
 
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -94,13 +109,11 @@ export default function SnakeDetailScreen() {
   }, [data]);
 
   const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleDateString();
+    return new Date(timestamp).toLocaleDateString();
   };
 
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString([], {
+    return new Date(timestamp).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
@@ -110,6 +123,17 @@ export default function SnakeDetailScreen() {
     if (lat == null || lon == null) return "Location not available";
     return `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
   };
+
+  const getDisplayVenomStatus = () => {
+    const value = scan?.venomType?.toLowerCase() ?? "";
+
+    if (value.includes("non-venomous")) return "Non-venomous";
+    if (value.includes("venomous")) return "Venomous";
+
+    return scan?.name || "Snake";
+  };
+
+  const isVenomous = getDisplayVenomStatus() === "Venomous";
 
   if (loading) {
     return (
@@ -125,6 +149,7 @@ export default function SnakeDetailScreen() {
       <View style={[styles.container, styles.centerContainer]}>
         <AlertTriangle size={48} color="#DC2626" />
         <Text style={{ color: "#fff", marginTop: 12 }}>Scan not found</Text>
+
         <TouchableOpacity
           onPress={() => router.back()}
           style={{ marginTop: 20 }}
@@ -134,10 +159,6 @@ export default function SnakeDetailScreen() {
       </View>
     );
   }
-
-  const isVenomous =
-    scan.venomType.toLowerCase().includes("venomous") &&
-    !scan.venomType.toLowerCase().includes("non");
 
   return (
     <View style={styles.container}>
@@ -166,13 +187,7 @@ export default function SnakeDetailScreen() {
         <View style={styles.infoOverlay}>
           <View style={styles.infoRow}>
             <View style={styles.infoTextContainer}>
-              <Text style={styles.snakeName}>{scan.name}</Text>
-
-              {snakeInfo ? (
-                <Text style={styles.snakeScientific}>
-                  {snakeInfo.scientific_name}
-                </Text>
-              ) : null}
+              <Text style={styles.snakeName}>{getDisplayVenomStatus()}</Text>
 
               <View style={styles.locationRow}>
                 <MapPin size={14} color="#34D399" />
@@ -218,15 +233,6 @@ export default function SnakeDetailScreen() {
               <View style={styles.statusTextContainer}>
                 <Text
                   style={[
-                    styles.statusTitle,
-                    { color: isVenomous ? "#991B1B" : "#065F46" },
-                  ]}
-                >
-                  {scan.venomType}
-                </Text>
-
-                <Text
-                  style={[
                     styles.statusConfidence,
                     { color: isVenomous ? "#B91C1C" : "#047857" },
                   ]}
@@ -236,12 +242,106 @@ export default function SnakeDetailScreen() {
               </View>
             </View>
 
-            {isVenomous && snakeInfo?.warning ? (
-              <View style={styles.warningBox}>
-                <Text style={styles.warningText}>⚠️ {snakeInfo.warning}</Text>
+            {snakeInfo?.warning ? (
+              <View
+                style={[
+                  styles.warningBox,
+                  { backgroundColor: isVenomous ? "#FECACA" : "#D1FAE5" },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.warningText,
+                    { color: isVenomous ? "#7F1D1D" : "#065F46" },
+                  ]}
+                >
+                  ⚠️ {snakeInfo.warning}
+                </Text>
               </View>
             ) : null}
           </View>
+
+          {snakeInfo?.medical_importance ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Shield size={20} color="#059669" />
+                <Text style={[styles.cardTitle, { marginLeft: 8 }]}>
+                  Medical Importance
+                </Text>
+              </View>
+
+              <Text style={styles.cardText}>
+                {snakeInfo.medical_importance}
+              </Text>
+            </View>
+          ) : null}
+
+          {snakeInfo?.identification ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Info size={20} color="#059669" />
+                <Text style={[styles.cardTitle, { marginLeft: 8 }]}>
+                  Identification Variables
+                </Text>
+              </View>
+
+              <InfoRow
+                label="Primary Color"
+                value={snakeInfo.identification.primary_color}
+              />
+              <InfoRow
+                label="Secondary Color"
+                value={snakeInfo.identification.secondary_color}
+              />
+              <InfoRow
+                label="Head Shape"
+                value={snakeInfo.identification.head_shape}
+              />
+              <InfoRow
+                label="Pupil Shape"
+                value={snakeInfo.identification.pupil_shape}
+              />
+              <InfoRow
+                label="Scale Texture"
+                value={snakeInfo.identification.scale_texture}
+              />
+              <InfoRow
+                label="Body Shape"
+                value={snakeInfo.identification.body_shape}
+              />
+              <InfoRow
+                label="Body Length"
+                value={snakeInfo.identification.body_length}
+              />
+              <InfoRow
+                label="Tail Characteristics"
+                value={snakeInfo.identification.tail_characteristics}
+              />
+              <InfoRow
+                label="Pattern"
+                value={snakeInfo.identification.pattern}
+              />
+              <InfoRow
+                label="Eye Size"
+                value={snakeInfo.identification.eye_size}
+              />
+
+              {snakeInfo.identification.distinct_features?.length ? (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={styles.subTitle}>Distinct Features</Text>
+
+                  {snakeInfo.identification.distinct_features.map(
+                    (feature, index) => (
+                      <View key={index} style={styles.listItem}>
+                        <Text style={styles.bulletPoint}>•</Text>
+                        <Text style={styles.listText}>{feature}</Text>
+                      </View>
+                    ),
+                  )}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
 
           {snakeInfo?.description ? (
             <View style={styles.card}>
@@ -251,6 +351,7 @@ export default function SnakeDetailScreen() {
                   Description
                 </Text>
               </View>
+
               <Text style={styles.cardText}>{snakeInfo.description}</Text>
             </View>
           ) : null}
@@ -258,6 +359,7 @@ export default function SnakeDetailScreen() {
           {snakeInfo?.traits?.length ? (
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Identifying Traits</Text>
+
               {snakeInfo.traits.map((trait, index) => (
                 <View key={index} style={styles.listItem}>
                   <Text style={styles.bulletPoint}>•</Text>
@@ -275,6 +377,7 @@ export default function SnakeDetailScreen() {
                   Habitat
                 </Text>
               </View>
+
               <Text style={styles.cardText}>{snakeInfo.habitat}</Text>
             </View>
           ) : null}
@@ -287,6 +390,7 @@ export default function SnakeDetailScreen() {
                   Behavior
                 </Text>
               </View>
+
               <Text style={styles.cardText}>{snakeInfo.behavior}</Text>
             </View>
           ) : null}
@@ -310,6 +414,7 @@ export default function SnakeDetailScreen() {
             >
               <View style={styles.cardHeaderRow}>
                 <Shield size={20} color={isVenomous ? "#DC2626" : "#1D4ED8"} />
+
                 <Text
                   style={[
                     styles.safetyTitle,
@@ -333,6 +438,7 @@ export default function SnakeDetailScreen() {
                   >
                     •
                   </Text>
+
                   <Text
                     style={[
                       styles.listText,
@@ -346,9 +452,33 @@ export default function SnakeDetailScreen() {
             </View>
           ) : null}
 
+          {snakeInfo?.confidence_note ? (
+            <View style={styles.card}>
+              <View style={styles.cardHeaderRow}>
+                <Info size={20} color="#059669" />
+                <Text style={[styles.cardTitle, { marginLeft: 8 }]}>
+                  Confidence Note
+                </Text>
+              </View>
+
+              <Text style={styles.cardText}>{snakeInfo.confidence_note}</Text>
+            </View>
+          ) : null}
+
           <View style={{ height: 40 }} />
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+
+  return (
+    <View style={styles.infoVariableRow}>
+      <Text style={styles.infoVariableLabel}>{label}</Text>
+      <Text style={styles.infoVariableValue}>{value}</Text>
     </View>
   );
 }
@@ -395,11 +525,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.9)",
     borderRadius: 12,
     padding: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
     zIndex: 20,
   },
   infoOverlay: {
@@ -417,15 +542,9 @@ const styles = StyleSheet.create({
   },
   infoTextContainer: { flex: 1 },
   snakeName: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "bold",
     color: "#fff",
-    marginBottom: 4,
-  },
-  snakeScientific: {
-    fontSize: 16,
-    color: "#E5E7EB",
-    fontStyle: "italic",
     marginBottom: 4,
   },
   locationRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
@@ -458,26 +577,20 @@ const styles = StyleSheet.create({
   },
   statusHeader: { flexDirection: "row", alignItems: "center" },
   statusTextContainer: { marginLeft: 12, flex: 1 },
-  statusTitle: { fontSize: 16, fontWeight: "bold" },
+  statusTitle: { fontSize: 18, fontWeight: "bold" },
   statusConfidence: { fontSize: 14, marginTop: 2 },
   warningBox: {
-    backgroundColor: "#FECACA",
     borderRadius: 12,
     padding: 12,
     marginTop: 12,
   },
-  warningText: { color: "#7F1D1D", fontSize: 12, fontWeight: "600" },
+  warningText: { fontSize: 12, fontWeight: "600", lineHeight: 18 },
 
   card: {
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   cardHeaderRow: {
     flexDirection: "row",
@@ -491,6 +604,33 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardText: { fontSize: 14, color: "#4B5563", lineHeight: 20 },
+
+  subTitle: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#111827",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+
+  infoVariableRow: {
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    paddingBottom: 8,
+  },
+  infoVariableLabel: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#059669",
+    marginBottom: 2,
+  },
+  infoVariableValue: {
+    fontSize: 14,
+    color: "#374151",
+    lineHeight: 20,
+  },
+
   listItem: { flexDirection: "row", marginBottom: 6 },
   bulletPoint: {
     fontSize: 14,

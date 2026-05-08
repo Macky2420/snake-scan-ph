@@ -6,7 +6,6 @@ import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import * as jpeg from "jpeg-js";
 import {
-  AlertOctagon,
   AlertTriangle,
   Brain,
   Camera,
@@ -41,10 +40,27 @@ import { initDatabase, insertScan } from "../data/sqlite";
 
 type FlashMode = "off" | "on" | "auto";
 
+type IdentificationInfo = {
+  primary_color: string;
+  secondary_color: string;
+  head_shape: string;
+  pupil_shape: string;
+  scale_texture: string;
+  body_shape: string;
+  body_length: string;
+  tail_characteristics: string;
+  pattern: string;
+  eye_size: string;
+  distinct_features: string[];
+};
+
 type SnakeInfo = {
   common_name: string;
   scientific_name: string;
   venom_type: string;
+  medical_importance?: string;
+  confidence_note?: string;
+  identification?: IdentificationInfo;
   warning: string;
   description: string;
   traits: string[];
@@ -57,14 +73,13 @@ type SnakeInfo = {
 type ScanResult =
   | {
       status: "low_confidence";
-      name: string;
-      venom_type: string;
+      displayLabel: string;
       confidence: number;
     }
   | {
       status: "snake";
       key: string;
-      name: string;
+      displayLabel: "Venomous" | "Non-venomous";
       venom_type: string;
       confidence: number;
     };
@@ -256,25 +271,15 @@ export default function Scan() {
     setCurrentImageUri(uri);
 
     try {
-      console.log("SCAN: start");
-      console.log("SCAN: uri =", uri);
-
       const coords = await getCurrentLocation();
 
       if (coords) {
         setCurrentLocation(coords);
       }
 
-      console.log("SCAN: converting image");
       const inputTensor = await imageUriToInputTensor(uri);
 
-      console.log("SCAN: tensor size =", inputTensor.length);
-
-      console.log("SCAN: running binary model");
       const binaryOutput = await binaryPlugin.model.run([inputTensor]);
-
-      console.log("SCAN: binaryOutput =", binaryOutput);
-
       const binaryArray = binaryOutput?.[0] as Float32Array | undefined;
 
       if (!binaryArray || binaryArray.length === 0) {
@@ -287,15 +292,10 @@ export default function Scan() {
         throw new Error("Binary model returned NaN");
       }
 
-      console.log("SCAN: snakeProb =", snakeProb);
-
       if (snakeProb <= SNAKE_THRESHOLD) {
-        console.log("SCAN: low confidence, skipping database save");
-
         const result: ScanResult = {
           status: "low_confidence",
-          name: "Sorry, the confidence is very low.",
-          venom_type: "Please scan a clearer snake image.",
+          displayLabel: "Sorry, the confidence is very low.",
           confidence: Number((snakeProb * 100).toFixed(2)),
         };
 
@@ -303,11 +303,7 @@ export default function Scan() {
         return;
       }
 
-      console.log("SCAN: running classifier internally");
       const classifierOutput = await classifierPlugin.model.run([inputTensor]);
-
-      console.log("SCAN: classifierOutput =", classifierOutput);
-
       const classArray = classifierOutput?.[0] as Float32Array | undefined;
 
       if (!classArray || classArray.length === 0) {
@@ -340,14 +336,12 @@ export default function Scan() {
       const result: ScanResult = {
         status: "snake",
         key: classKey,
-        name: isNonVenomous ? "Non-venomous Snake" : "Venomous Snake",
+        displayLabel: isNonVenomous ? "Non-venomous" : "Venomous",
         venom_type: info.venom_type,
         confidence: Number((bestScore * 100).toFixed(2)),
       };
 
       setScanResult(result);
-
-      console.log("SCAN: saving snake to database");
 
       await insertScan({
         latitude: coords?.latitude ?? null,
@@ -355,19 +349,16 @@ export default function Scan() {
         imageUri: uri,
         status: "snake",
         snakeKey: classKey,
-        name: result.name,
-        venomType: result.venom_type,
+        name: result.displayLabel,
+        venomType: result.displayLabel,
         confidence: result.confidence,
       });
-
-      console.log("SCAN: save done");
     } catch (error) {
       console.error("SCAN ERROR:", error);
 
       const errorResult: ScanResult = {
         status: "low_confidence",
-        name: "Scan failed.",
-        venom_type: "Please try again with a clearer image.",
+        displayLabel: "Scan failed. Please try again with a clearer image.",
         confidence: 0,
       };
 
@@ -424,7 +415,7 @@ export default function Scan() {
       };
     }
 
-    if (scanResult.name === "Non-venomous Snake") {
+    if (scanResult.displayLabel === "Non-venomous") {
       return {
         icon: CheckCircle2,
         color: "#059669",
@@ -439,6 +430,43 @@ export default function Scan() {
       bgColor: "#DC2626",
       statusText: "Venomous",
     };
+  };
+
+  const renderIdentificationPreview = () => {
+    if (!scanResult || scanResult.status !== "snake") return null;
+
+    const info = snakeInfoMap[scanResult.key];
+    const identification = info?.identification;
+
+    if (!identification) return null;
+
+    return (
+      <View style={styles.identificationPreview}>
+        <Text style={styles.previewTitle}>Identification Features</Text>
+
+        <View style={styles.previewRow}>
+          <Text style={styles.previewLabel}>Color</Text>
+          <Text style={styles.previewValue}>
+            {identification.primary_color}
+          </Text>
+        </View>
+
+        <View style={styles.previewRow}>
+          <Text style={styles.previewLabel}>Head Shape</Text>
+          <Text style={styles.previewValue}>{identification.head_shape}</Text>
+        </View>
+
+        <View style={styles.previewRow}>
+          <Text style={styles.previewLabel}>Pupil</Text>
+          <Text style={styles.previewValue}>{identification.pupil_shape}</Text>
+        </View>
+
+        <View style={styles.previewRow}>
+          <Text style={styles.previewLabel}>Body Length</Text>
+          <Text style={styles.previewValue}>{identification.body_length}</Text>
+        </View>
+      </View>
+    );
   };
 
   const renderDetailsModal = () => {
@@ -481,23 +509,117 @@ export default function Scan() {
                   { borderLeftColor: getResultConfig()?.color },
                 ]}
               >
-                <Text style={styles.detailCommon}>{scanResult.name}</Text>
+                <Text style={styles.detailCommon}>
+                  {scanResult.displayLabel}
+                </Text>
 
-                <View
-                  style={[
-                    styles.venomBadge,
-                    { backgroundColor: getResultConfig()?.bgColor },
-                  ]}
-                >
-                  <AlertOctagon size={14} color="#fff" />
-                  <Text style={styles.venomBadgeText}>{info.venom_type}</Text>
-                </View>
+                {info.medical_importance ? (
+                  <Text style={styles.sectionText}>
+                    {info.medical_importance}
+                  </Text>
+                ) : null}
               </View>
 
               {info.warning ? (
                 <View style={styles.warningBanner}>
                   <AlertTriangle size={20} color="#FCA5A5" />
                   <Text style={styles.warningText}>{info.warning}</Text>
+                </View>
+              ) : null}
+
+              {info.identification ? (
+                <View style={styles.detailSection}>
+                  <View style={styles.sectionHeader}>
+                    <Info size={18} color="#34D399" />
+                    <Text style={styles.sectionTitle}>
+                      Identification Variables
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>PRIMARY COLOR</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.primary_color}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>SECONDARY COLOR</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.secondary_color}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>HEAD SHAPE</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.head_shape}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>PUPIL SHAPE</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.pupil_shape}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>SCALE TEXTURE</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.scale_texture}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>BODY SHAPE</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.body_shape}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>BODY LENGTH</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.body_length}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>TAIL CHARACTERISTICS</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.tail_characteristics}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>PATTERN</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.pattern}
+                    </Text>
+                  </View>
+
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>EYE SIZE</Text>
+                    <Text style={styles.infoValue}>
+                      {info.identification.eye_size}
+                    </Text>
+                  </View>
+
+                  {info.identification.distinct_features?.length ? (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={styles.infoLabel}>DISTINCT FEATURES</Text>
+
+                      {info.identification.distinct_features.map(
+                        (feature, idx) => (
+                          <View key={idx} style={styles.traitItem}>
+                            <View style={styles.traitDot} />
+                            <Text style={styles.traitText}>{feature}</Text>
+                          </View>
+                        ),
+                      )}
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
 
@@ -508,20 +630,6 @@ export default function Scan() {
                 </View>
 
                 <Text style={styles.sectionText}>{info.description}</Text>
-              </View>
-
-              <View style={styles.detailSection}>
-                <View style={styles.sectionHeader}>
-                  <Info size={18} color="#34D399" />
-                  <Text style={styles.sectionTitle}>Identifying Traits</Text>
-                </View>
-
-                {info.traits.map((trait, idx) => (
-                  <View key={idx} style={styles.traitItem}>
-                    <View style={styles.traitDot} />
-                    <Text style={styles.traitText}>{trait}</Text>
-                  </View>
-                ))}
               </View>
 
               <View style={styles.detailSection}>
@@ -556,7 +664,7 @@ export default function Scan() {
                 ))}
               </View>
 
-              <View style={[styles.detailSection, styles.lastSection]}>
+              <View style={styles.detailSection}>
                 <View style={styles.sectionHeader}>
                   <Trees size={18} color="#34D399" />
                   <Text style={styles.sectionTitle}>Ecological Role</Text>
@@ -564,6 +672,17 @@ export default function Scan() {
 
                 <Text style={styles.sectionText}>{info.ecological_role}</Text>
               </View>
+
+              {info.confidence_note ? (
+                <View style={[styles.detailSection, styles.lastSection]}>
+                  <View style={styles.sectionHeader}>
+                    <Info size={18} color="#34D399" />
+                    <Text style={styles.sectionTitle}>Confidence Note</Text>
+                  </View>
+
+                  <Text style={styles.sectionText}>{info.confidence_note}</Text>
+                </View>
+              ) : null}
             </ScrollView>
           </View>
         </View>
@@ -778,22 +897,11 @@ export default function Scan() {
                 <config.icon size={40} color="#fff" strokeWidth={2} />
               </View>
 
-              <Text style={styles.resultName}>{scanResult.name}</Text>
-
-              <View
-                style={[
-                  styles.statusBadge,
-                  { backgroundColor: `${config.color}20` },
-                ]}
-              >
-                <View
-                  style={[styles.statusDot, { backgroundColor: config.color }]}
-                />
-
-                <Text style={[styles.statusText, { color: config.color }]}>
-                  {config.statusText}
-                </Text>
-              </View>
+              <Text style={styles.resultName}>
+                {scanResult.status === "snake"
+                  ? scanResult.displayLabel
+                  : scanResult.displayLabel}
+              </Text>
 
               <View style={styles.confidenceContainer}>
                 <View style={styles.confidenceHeader}>
@@ -819,9 +927,13 @@ export default function Scan() {
                 </View>
               </View>
 
-              <Text style={styles.resultDescription}>
-                {scanResult.venom_type}
-              </Text>
+              {renderIdentificationPreview()}
+
+              {scanResult.status === "low_confidence" ? (
+                <Text style={styles.resultDescription}>
+                  Please scan a clearer snake image.
+                </Text>
+              ) : null}
 
               {currentLocation && scanResult.status === "snake" ? (
                 <View style={styles.locationTag}>
@@ -1131,11 +1243,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.1)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 24,
-    elevation: 10,
   },
   resultIconContainer: {
     width: 80,
@@ -1144,19 +1251,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   resultName: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: "800",
     color: "#fff",
-    marginBottom: 8,
+    marginBottom: 16,
     textAlign: "center",
-    letterSpacing: 0.3,
   },
   resultDescription: {
     color: "#D1D5DB",
@@ -1164,26 +1265,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 16,
-  },
-  statusBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginBottom: 20,
-    gap: 6,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
   confidenceContainer: {
     width: "100%",
@@ -1212,6 +1293,40 @@ const styles = StyleSheet.create({
   confidenceBarFill: {
     height: "100%",
     borderRadius: 3,
+  },
+  identificationPreview: {
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  previewTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+  previewRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  previewLabel: {
+    color: "#9CA3AF",
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
+  },
+  previewValue: {
+    color: "#D1D5DB",
+    fontSize: 12,
+    fontWeight: "500",
+    flex: 1.4,
+    textAlign: "right",
   },
   locationTag: {
     flexDirection: "row",
@@ -1242,11 +1357,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 14,
     gap: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
   },
   viewDetailsText: {
     color: "#fff",
@@ -1318,22 +1428,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "800",
     color: "#fff",
-    marginBottom: 12,
-  },
-  venomBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
-  },
-  venomBadgeText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "700",
-    textTransform: "uppercase",
+    marginBottom: 8,
   },
   warningBanner: {
     flexDirection: "row",
@@ -1379,6 +1474,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#9CA3AF",
     lineHeight: 22,
+  },
+  infoRow: {
+    marginBottom: 10,
+  },
+  infoLabel: {
+    color: "#34D399",
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 3,
+    letterSpacing: 0.5,
+  },
+  infoValue: {
+    color: "#D1D5DB",
+    fontSize: 14,
+    lineHeight: 20,
   },
   traitItem: {
     flexDirection: "row",
@@ -1454,10 +1564,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 12,
-    shadowColor: "#059669",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
   },
   permissionBtnText: {
     color: "#fff",

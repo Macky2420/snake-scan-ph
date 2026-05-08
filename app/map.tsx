@@ -18,6 +18,27 @@ import { getAllScans, type ScanRecord } from "../data/sqlite";
 const { width } = Dimensions.get("window");
 const MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
+type IdentificationInfo = {
+  primary_color: string;
+  secondary_color: string;
+  head_shape: string;
+  pupil_shape: string;
+  scale_texture: string;
+  body_shape: string;
+  body_length: string;
+  tail_characteristics: string;
+  pattern: string;
+  eye_size: string;
+  distinct_features: string[];
+};
+
+type SnakeInfo = {
+  venom_type: string;
+  identification?: IdentificationInfo;
+};
+
+const snakeInfoMap = require("../data/snake.json") as Record<string, SnakeInfo>;
+
 interface MarkerData extends ScanRecord {
   latitude: number;
   longitude: number;
@@ -32,7 +53,6 @@ export default function MapScreen() {
   const [isConnected, setIsConnected] = useState(true);
   const [showOfflineWarning, setShowOfflineWarning] = useState(false);
   const [selectedScan, setSelectedScan] = useState<MarkerData | null>(null);
-
   const [popupAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
@@ -70,34 +90,23 @@ export default function MapScreen() {
     ) as MarkerData[];
   }, [scans]);
 
+  const getSnakeInfo = (scan: ScanRecord) => {
+    if (!scan.snakeKey) return null;
+    return snakeInfoMap[scan.snakeKey] ?? null;
+  };
+
+  const getVenomStatus = (scan: ScanRecord) => {
+    const info = getSnakeInfo(scan);
+    const value = (info?.venom_type || scan.venomType || "").toLowerCase();
+
+    if (value.includes("non-venomous")) return "Non-venomous";
+    if (value.includes("venomous")) return "Venomous";
+
+    return "Unknown";
+  };
+
   const isVenomous = (scan: ScanRecord) => {
-    const venomType = scan.venomType?.toLowerCase() ?? "";
-    return venomType.includes("venomous") && !venomType.includes("non");
-  };
-
-  const getDangerLevel = (scan: ScanRecord) => {
-    const venomType = scan.venomType?.toLowerCase() ?? "";
-    if (venomType.includes("highly")) return "Highly Dangerous";
-    if (venomType.includes("venomous") && !venomType.includes("non")) {
-      return "Venomous";
-    }
-    return "Non-venomous";
-  };
-
-  const getSnakeDisplayName = (scan: Partial<ScanRecord>) => {
-    const candidates = [
-      (scan as any).name,
-      (scan as any).snakeName,
-      (scan as any).label,
-      (scan as any).predictedClass,
-      (scan as any).prediction,
-    ];
-
-    const found = candidates.find(
-      (value) => typeof value === "string" && value.trim().length > 0,
-    );
-
-    return found ?? "Unknown Snake";
+    return getVenomStatus(scan) === "Venomous";
   };
 
   const initialCenter = useMemo(() => {
@@ -114,16 +123,13 @@ export default function MapScreen() {
     return [centerLon, centerLat] as [number, number];
   }, [validScans]);
 
-  const goBack = () => {
-    router.back();
-  };
+  const goBack = () => router.back();
 
-  const dismissWarning = () => {
-    setShowOfflineWarning(false);
-  };
+  const dismissWarning = () => setShowOfflineWarning(false);
 
   const handleMarkerPress = (scan: MarkerData) => {
     setSelectedScan(scan);
+
     Animated.spring(popupAnim, {
       toValue: 1,
       useNativeDriver: true,
@@ -150,6 +156,9 @@ export default function MapScreen() {
     outputRange: [0, 1],
   });
 
+  const selectedInfo = selectedScan ? getSnakeInfo(selectedScan) : null;
+  const selectedIdentification = selectedInfo?.identification;
+
   return (
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: insets.top }]}>
@@ -162,7 +171,9 @@ export default function MapScreen() {
           <Text style={styles.headerSubtitle}>
             {isLoading
               ? "Loading..."
-              : `${validScans.length} location${validScans.length !== 1 ? "s" : ""} mapped`}
+              : `${validScans.length} location${
+                  validScans.length !== 1 ? "s" : ""
+                } mapped`}
           </Text>
         </View>
 
@@ -211,8 +222,7 @@ export default function MapScreen() {
                 />
 
                 {validScans.map((scan) => {
-                  const venomous = isVenomous(scan);
-                  const markerColor = venomous ? "#DC2626" : "#059669";
+                  const markerColor = isVenomous(scan) ? "#DC2626" : "#059669";
 
                   return (
                     <MarkerView
@@ -265,30 +275,31 @@ export default function MapScreen() {
                           },
                         ]}
                       />
-                      <Text style={styles.popupTitle} numberOfLines={1}>
-                        {getSnakeDisplayName(selectedScan)}
+
+                      <Text
+                        style={[
+                          styles.popupTitle,
+                          {
+                            color: isVenomous(selectedScan)
+                              ? "#DC2626"
+                              : "#059669",
+                          },
+                        ]}
+                      >
+                        {getVenomStatus(selectedScan)}
                       </Text>
                     </View>
 
                     <View style={styles.popupContent}>
                       <View style={styles.popupRow}>
-                        <Text style={styles.popupLabel}>Danger Level:</Text>
-                        <Text
-                          style={[
-                            styles.popupValue,
-                            {
-                              color: isVenomous(selectedScan)
-                                ? "#DC2626"
-                                : "#059669",
-                            },
-                          ]}
-                        >
-                          {getDangerLevel(selectedScan)}
+                        <Text style={styles.popupLabel}>Confidence</Text>
+                        <Text style={styles.popupValue}>
+                          {selectedScan.confidence.toFixed(1)}%
                         </Text>
                       </View>
 
                       <View style={styles.popupRow}>
-                        <Text style={styles.popupLabel}>Date:</Text>
+                        <Text style={styles.popupLabel}>Date</Text>
                         <Text style={styles.popupValue}>
                           {selectedScan.timestamp
                             ? new Date(
@@ -299,12 +310,50 @@ export default function MapScreen() {
                       </View>
 
                       <View style={styles.popupRow}>
-                        <Text style={styles.popupLabel}>Location:</Text>
+                        <Text style={styles.popupLabel}>Location</Text>
                         <Text style={styles.popupValue} numberOfLines={1}>
                           {selectedScan.latitude.toFixed(4)},{" "}
                           {selectedScan.longitude.toFixed(4)}
                         </Text>
                       </View>
+
+                      {selectedIdentification ? (
+                        <View style={styles.identificationBox}>
+                          <Text style={styles.identificationTitle}>
+                            Identification Variables
+                          </Text>
+
+                          <PopupInfo
+                            label="Color"
+                            value={selectedIdentification.primary_color}
+                          />
+
+                          <PopupInfo
+                            label="Head Shape"
+                            value={selectedIdentification.head_shape}
+                          />
+
+                          <PopupInfo
+                            label="Pupil"
+                            value={selectedIdentification.pupil_shape}
+                          />
+
+                          <PopupInfo
+                            label="Scales"
+                            value={selectedIdentification.scale_texture}
+                          />
+
+                          <PopupInfo
+                            label="Body Length"
+                            value={selectedIdentification.body_length}
+                          />
+
+                          <PopupInfo
+                            label="Pattern"
+                            value={selectedIdentification.pattern}
+                          />
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                 </Animated.View>
@@ -345,6 +394,7 @@ export default function MapScreen() {
             />
             <Text style={styles.legendText}>Venomous</Text>
           </View>
+
           <View style={styles.legendItem}>
             <View
               style={[styles.legendDotMinimal, { backgroundColor: "#059669" }]}
@@ -359,6 +409,17 @@ export default function MapScreen() {
           MapLibre + OpenFreeMap • No API key required
         </Text>
       </View>
+    </View>
+  );
+}
+
+function PopupInfo({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+
+  return (
+    <View style={styles.popupInfoRow}>
+      <Text style={styles.popupInfoLabel}>{label}</Text>
+      <Text style={styles.popupInfoValue}>{value}</Text>
     </View>
   );
 }
@@ -451,9 +512,9 @@ const styles = StyleSheet.create({
   },
   popupContainer: {
     position: "absolute",
-    bottom: 100,
-    left: 20,
-    right: 20,
+    bottom: 90,
+    left: 16,
+    right: 16,
     alignItems: "center",
   },
   popup: {
@@ -461,7 +522,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 16,
     width: "100%",
-    maxWidth: 320,
+    maxWidth: 360,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -488,9 +549,8 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   popupTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
+    fontSize: 20,
+    fontWeight: "800",
     flex: 1,
   },
   popupContent: {
@@ -511,11 +571,43 @@ const styles = StyleSheet.create({
     color: "#111827",
     fontWeight: "600",
     maxWidth: "60%",
+    textAlign: "right",
+  },
+  identificationBox: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    gap: 6,
+  },
+  identificationTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 4,
+  },
+  popupInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  popupInfoLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontWeight: "600",
+    flex: 1,
+  },
+  popupInfoValue: {
+    fontSize: 12,
+    color: "#111827",
+    fontWeight: "600",
+    flex: 1.4,
+    textAlign: "right",
   },
   internetIndicator: {
     position: "absolute",
     top: 16,
-    right: 16,
+    left: 16,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(15, 23, 42, 0.9)",

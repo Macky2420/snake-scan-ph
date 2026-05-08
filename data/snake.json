@@ -3,17 +3,36 @@
     "common_name": "Barred Coral Snake",
     "scientific_name": "Calliophis intestinalis",
     "venom_type": "Venomous Snake",
+    "medical_importance": "Highly medically significant; venom may contain neurotoxic components that can affect the nervous system.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Red",
+      "secondary_color": "Black and yellow bands",
+      "head_shape": "Small rounded head that is not clearly wider than the neck",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth and glossy scales",
+      "body_shape": "Very slender cylindrical body",
+      "body_length": "30–60 cm",
+      "tail_characteristics": "Short and tapering tail",
+      "pattern": "Alternating red, black, and yellow bands along the body",
+      "eye_size": "Small eyes",
+      "distinct_features": [
+        "Bright warning coloration",
+        "Small head with glossy scales",
+        "Secretive burrowing appearance",
+        "Banding pattern across the body"
+      ]
+    },
     "warning": "Warning: Highly venomous. Avoid contact and seek medical help immediately if bitten.",
-    "description": "The Barred Coral Snake is a small but extremely venomous species known for its bright warning coloration. Despite its size, it carries potent neurotoxic venom that can affect the nervous system. It is rarely encountered due to its secretive and burrowing lifestyle.",
+    "description": "The Barred Coral Snake is a small but highly venomous species known for its bright warning coloration. It is rarely encountered because of its secretive and burrowing lifestyle.",
     "traits": [
       "Length: 30–60 cm",
       "Slender body with red, black, and yellow bands",
       "Small head with smooth glossy scales",
-      "Front-fanged venom delivery",
       "Burrowing behavior"
     ],
     "habitat": "Found in forest floors, leaf litter, and moist soil. Often hidden under logs, rocks, or underground.",
-    "behavior": "Very shy and secretive. Rarely aggressive but will bite if handled. Mostly nocturnal.",
+    "behavior": "Very shy and secretive. Rarely aggressive but may bite if handled. Mostly nocturnal or hidden during the day.",
     "ecological_role": "Controls populations of small reptiles and invertebrates, helping maintain ecological balance.",
     "safety": [
       "Do not handle or disturb",
@@ -26,20 +45,41 @@
     "common_name": "Dog-toothed Cat Snake",
     "scientific_name": "Boiga cynodon",
     "venom_type": "Mildly Venomous Snake",
+    "medical_importance": "Mildly medically significant; rear-fanged venom may cause localized pain or swelling.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Brown",
+      "secondary_color": "Dark brown or grayish markings",
+      "head_shape": "Elongated head that is slightly distinct from the neck",
+      "pupil_shape": "Vertical pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Long and slender arboreal body",
+      "body_length": "1.0–1.5 meters",
+      "tail_characteristics": "Long tapering tail useful for climbing",
+      "pattern": "Brown body with irregular darker bands or blotches",
+      "eye_size": "Large eyes adapted for nocturnal activity",
+      "distinct_features": [
+        "Large cat-like eyes",
+        "Slender climbing body",
+        "Rear-fanged venom system",
+        "Nocturnal arboreal appearance"
+      ]
+    },
     "warning": "Warning: Mild venom. Avoid handling.",
-    "description": "A slender arboreal snake with rear fangs. It is mildly venomous and primarily feeds on birds, lizards, and small mammals. It has large eyes adapted for night hunting.",
+    "description": "A slender arboreal snake with rear fangs. It is mildly venomous and primarily feeds on birds, lizards, and small mammals. Its large eyes help it hunt at night.",
     "traits": [
       "Length: 1.0–1.5 meters",
       "Slender body with brown or patterned coloration",
       "Large eyes for nocturnal vision",
       "Rear-fanged venom system"
     ],
-    "habitat": "Forests, trees, and vegetation. Often found in branches and dense foliage.",
+    "habitat": "Forests, trees, and dense vegetation. Often found in branches and foliage.",
     "behavior": "Nocturnal and agile. Moves quickly through trees while hunting prey.",
-    "ecological_role": "Helps control bird and small reptile populations.",
+    "ecological_role": "Helps control bird, lizard, and small mammal populations.",
     "safety": [
       "Avoid direct handling",
-      "Do not provoke"
+      "Do not provoke",
+      "Wash bite area and seek medical advice if bitten"
     ]
   },
 
@@ -47,6 +87,26 @@
     "common_name": "Gervais' Worm Snake",
     "scientific_name": "Calamaria gervaisii",
     "venom_type": "Non-venomous Snake",
+    "medical_importance": "Non-medically significant; harmless to humans.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Dark brown",
+      "secondary_color": "Black or slightly lighter underside",
+      "head_shape": "Tiny rounded head that blends with the body",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth and shiny scales",
+      "body_shape": "Very small worm-like cylindrical body",
+      "body_length": "10–25 cm",
+      "tail_characteristics": "Very short tail",
+      "pattern": "Mostly plain with minimal visible markings",
+      "eye_size": "Very small eyes",
+      "distinct_features": [
+        "Worm-like appearance",
+        "Tiny body size",
+        "Small head and eyes",
+        "Burrowing lifestyle"
+      ]
+    },
     "warning": "Safe and harmless to humans.",
     "description": "A tiny burrowing snake that resembles a worm. It is completely harmless and rarely seen due to its underground lifestyle.",
     "traits": [
@@ -60,7 +120,8 @@
     "ecological_role": "Helps control insect populations and contributes to soil health.",
     "safety": [
       "Completely safe",
-      "Can be observed without risk"
+      "Can be observed without risk",
+      "Do not kill; relocate gently if necessary"
     ]
   },
 
@@ -68,20 +129,41 @@
     "common_name": "King Cobra",
     "scientific_name": "Ophiophagus hannah",
     "venom_type": "Venomous Snake",
+    "medical_importance": "Highly medically significant; venom is primarily neurotoxic and can be life-threatening.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Olive green to brown",
+      "secondary_color": "Black, yellowish, or pale cross bands",
+      "head_shape": "Large head with expandable hood",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Very long and muscular body",
+      "body_length": "3–5 meters",
+      "tail_characteristics": "Long tapering tail",
+      "pattern": "Olive or brown body with faint pale cross bands",
+      "eye_size": "Medium eyes",
+      "distinct_features": [
+        "Longest venomous snake in the world",
+        "Expandable hood",
+        "Raises front body when threatened",
+        "Known to feed on other snakes"
+      ]
+    },
     "warning": "Warning: Extremely dangerous. Keep a safe distance.",
-    "description": "The King Cobra is the longest venomous snake in the world and is known for feeding on other snakes. It is highly intelligent and capable of delivering large amounts of neurotoxic venom.",
+    "description": "The King Cobra is the longest venomous snake in the world and is known for feeding on other snakes. It is capable of delivering a large amount of neurotoxic venom.",
     "traits": [
       "Length: up to 5 meters",
       "Olive green to brown coloration",
       "Distinct hood when threatened",
       "Powerful neurotoxic venom"
     ],
-    "habitat": "Dense forests, bamboo thickets, and near water sources.",
-    "behavior": "Generally shy but highly defensive. Raises body and hood when threatened.",
+    "habitat": "Dense forests, bamboo thickets, and areas near water sources.",
+    "behavior": "Generally shy but highly defensive when threatened. Raises its body and expands its hood as a warning.",
     "ecological_role": "Controls populations of other snakes, including venomous species.",
     "safety": [
       "Stay far away",
       "Do not provoke",
+      "Do not attempt to capture",
       "Seek immediate medical help if bitten"
     ]
   },
@@ -90,6 +172,26 @@
     "common_name": "Luzon Bronzeback Tree Snake",
     "scientific_name": "Dendrelaphis luzonensis",
     "venom_type": "Non-venomous Snake",
+    "medical_importance": "Non-medically significant; harmless to humans.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Bronze or brown",
+      "secondary_color": "Greenish or lighter underside",
+      "head_shape": "Narrow elongated head",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Very slender tree-dwelling body",
+      "body_length": "0.8–1.2 meters",
+      "tail_characteristics": "Long slender tail",
+      "pattern": "Bronze dorsal coloration with subtle side markings",
+      "eye_size": "Large eyes",
+      "distinct_features": [
+        "Bronze-colored back",
+        "Very fast movement",
+        "Slender arboreal body",
+        "Large alert eyes"
+      ]
+    },
     "warning": "Harmless.",
     "description": "A fast-moving arboreal snake commonly found in trees. It is non-venomous and not dangerous to humans.",
     "traits": [
@@ -97,30 +199,50 @@
       "Bronze or green coloration",
       "Fast and agile climber"
     ],
-    "habitat": "Forests and trees.",
-    "behavior": "Active during the day and highly alert.",
-    "ecological_role": "Controls small insects and lizards.",
-    "safety": [
-      "Safe to observe"
-    ]
+    "habitat": "Forests, trees, shrubs, and vegetation.",
+    "behavior": "Active during the day and highly alert. Quickly escapes when disturbed.",
+    "ecological_role": "Controls small insects, frogs, and lizards.",
+    "safety": ["Safe to observe", "Do not grab or stress the animal"]
   },
 
   "Mangrove_Cat_Snake": {
     "common_name": "Mangrove Cat Snake",
     "scientific_name": "Boiga dendrophila",
     "venom_type": "Mildly Venomous Snake",
+    "medical_importance": "Mildly medically significant; rear-fanged venom may cause localized effects.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Black",
+      "secondary_color": "Yellow bands",
+      "head_shape": "Broad head distinct from the neck",
+      "pupil_shape": "Vertical pupils",
+      "scale_texture": "Smooth glossy scales",
+      "body_shape": "Slender but strong arboreal body",
+      "body_length": "1.5–2.5 meters",
+      "tail_characteristics": "Long tail adapted for climbing",
+      "pattern": "Black body with bright yellow cross bands",
+      "eye_size": "Large eyes",
+      "distinct_features": [
+        "Black and yellow banded body",
+        "Large cat-like eyes",
+        "Rear-fanged snake",
+        "Arboreal and nocturnal behavior"
+      ]
+    },
     "warning": "Warning: Mild venom. Avoid handling.",
-    "description": "A striking black and yellow snake known for its bold coloration and arboreal lifestyle.",
+    "description": "A striking black and yellow snake known for its bold coloration and arboreal lifestyle. It is mildly venomous and should not be handled.",
     "traits": [
       "Black body with yellow bands",
       "Large eyes",
       "Slender and agile"
     ],
-    "habitat": "Mangroves, forests, and coastal areas.",
-    "behavior": "Nocturnal hunter.",
-    "ecological_role": "Controls rodents and small animals.",
+    "habitat": "Mangroves, forests, coastal areas, and trees near water.",
+    "behavior": "Nocturnal hunter that often rests in branches during the day.",
+    "ecological_role": "Controls rodents, birds, and small animals.",
     "safety": [
-      "Avoid handling"
+      "Avoid handling",
+      "Do not provoke",
+      "Seek medical advice if bitten"
     ]
   },
 
@@ -128,18 +250,36 @@
     "common_name": "Müller's Wolf Snake",
     "scientific_name": "Lycodon muelleri",
     "venom_type": "Non-venomous Snake",
+    "medical_importance": "Non-medically significant; harmless to humans but may bite defensively.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Dark brown or black",
+      "secondary_color": "White or pale bands",
+      "head_shape": "Small slightly flattened head",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Small and slender body",
+      "body_length": "40–80 cm",
+      "tail_characteristics": "Short to moderately long tapering tail",
+      "pattern": "Dark body with pale bands or blotches",
+      "eye_size": "Small to medium eyes",
+      "distinct_features": [
+        "Dark body with pale bands",
+        "Often mistaken for venomous snakes",
+        "Nocturnal movement",
+        "Small slender form"
+      ]
+    },
     "warning": "Harmless.",
-    "description": "A small nocturnal snake often mistaken for venomous species due to its banded pattern.",
-    "traits": [
-      "Dark body with bands",
-      "Small size",
-      "Smooth scales"
-    ],
-    "habitat": "Urban and forest areas.",
-    "behavior": "Nocturnal and secretive.",
-    "ecological_role": "Controls small pests.",
+    "description": "A small nocturnal snake often mistaken for venomous species because of its banded pattern. It is non-venomous and useful for pest control.",
+    "traits": ["Dark body with bands", "Small size", "Smooth scales"],
+    "habitat": "Urban areas, gardens, forests, and areas with cover such as rocks or logs.",
+    "behavior": "Nocturnal and secretive. May hide in crevices or under objects during the day.",
+    "ecological_role": "Controls small pests, lizards, and other small animals.",
     "safety": [
-      "Safe to observe"
+      "Safe to observe",
+      "Avoid unnecessary handling",
+      "Relocate gently if found indoors"
     ]
   },
 
@@ -147,19 +287,37 @@
     "common_name": "North Philippine Temple Pitviper",
     "scientific_name": "Tropidolaemus subannulatus",
     "venom_type": "Venomous Snake",
+    "medical_importance": "Medically significant; pit viper venom may cause pain, swelling, tissue injury, and systemic effects.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Green",
+      "secondary_color": "Yellow, white, or darker markings",
+      "head_shape": "Distinct triangular head wider than the neck",
+      "pupil_shape": "Vertical pupils",
+      "scale_texture": "Keeled or rough-looking scales",
+      "body_shape": "Moderately thick arboreal body",
+      "body_length": "60–100 cm",
+      "tail_characteristics": "Prehensile tail used for climbing",
+      "pattern": "Green body with variable side markings or bands",
+      "eye_size": "Medium eyes",
+      "distinct_features": [
+        "Triangular head",
+        "Heat-sensing pits between eye and nostril",
+        "Green arboreal body",
+        "Ambush posture on branches"
+      ]
+    },
     "warning": "Warning: Venomous. Avoid close contact.",
-    "description": "A tree-dwelling pit viper with heat-sensing pits used to detect prey.",
-    "traits": [
-      "Green body",
-      "Triangular head",
-      "Heat-sensing pits"
-    ],
-    "habitat": "Forests and trees.",
-    "behavior": "Ambush predator that remains still for long periods.",
-    "ecological_role": "Controls small mammals and birds.",
+    "description": "A tree-dwelling pit viper with heat-sensing pits used to detect prey. It can remain motionless for long periods while waiting to ambush prey.",
+    "traits": ["Green body", "Triangular head", "Heat-sensing pits"],
+    "habitat": "Forests, trees, shrubs, and vegetation in humid environments.",
+    "behavior": "Ambush predator that remains still for long periods. Usually active at night.",
+    "ecological_role": "Controls small mammals, birds, frogs, and lizards.",
     "safety": [
       "Avoid close contact",
-      "Wear protective clothing"
+      "Do not touch branches blindly",
+      "Wear protective clothing in forested areas",
+      "Seek medical care if bitten"
     ]
   },
 
@@ -167,18 +325,36 @@
     "common_name": "Paradise Tree Snake",
     "scientific_name": "Chrysopelea paradisi",
     "venom_type": "Mildly Venomous Snake",
-    "warning": "Warning: Mild venom.",
-    "description": "A unique gliding snake capable of moving between trees by flattening its body.",
-    "traits": [
-      "Flattened body",
-      "Green with patterns",
-      "Gliding ability"
-    ],
-    "habitat": "Forests.",
-    "behavior": "Active climber and glider.",
-    "ecological_role": "Controls small animals.",
+    "medical_importance": "Mildly medically significant; venom is not usually dangerous to humans but bites should be avoided.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Green",
+      "secondary_color": "Black, yellow, or orange markings",
+      "head_shape": "Narrow elongated head",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Slender body capable of flattening during gliding",
+      "body_length": "0.8–1.2 meters",
+      "tail_characteristics": "Long slender tail",
+      "pattern": "Green body with dark-edged scales and colorful markings",
+      "eye_size": "Large eyes",
+      "distinct_features": [
+        "Can glide between trees",
+        "Flattened body during gliding",
+        "Green patterned body",
+        "Highly arboreal"
+      ]
+    },
+    "warning": "Warning: Mild venom. Avoid handling.",
+    "description": "A unique gliding snake capable of moving between trees by flattening its body. It is mildly venomous but not considered highly dangerous to humans.",
+    "traits": ["Flattened body", "Green with patterns", "Gliding ability"],
+    "habitat": "Forests, trees, plantations, and wooded areas.",
+    "behavior": "Active climber and glider. Often moves quickly through trees.",
+    "ecological_role": "Controls lizards, frogs, and other small animals.",
     "safety": [
-      "Avoid handling"
+      "Avoid handling",
+      "Do not provoke",
+      "Observe from a safe distance"
     ]
   },
 
@@ -186,56 +362,102 @@
     "common_name": "Philippine Blunt-headed Cat Snake",
     "scientific_name": "Aplopeltura boa",
     "venom_type": "Non-venomous Snake",
+    "medical_importance": "Non-medically significant; harmless to humans.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Brown or grayish brown",
+      "secondary_color": "Lighter underside",
+      "head_shape": "Short blunt head",
+      "pupil_shape": "Vertical or cat-like pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Slender body",
+      "body_length": "50–90 cm",
+      "tail_characteristics": "Thin tapering tail",
+      "pattern": "Mostly plain or subtly patterned body",
+      "eye_size": "Moderately large eyes",
+      "distinct_features": [
+        "Blunt head shape",
+        "Snail-eating specialization",
+        "Slender nocturnal body",
+        "Slow-moving behavior"
+      ]
+    },
     "warning": "Harmless.",
-    "description": "A specialized snail-eating snake with a blunt head adapted for its diet.",
-    "traits": [
-      "Blunt head",
-      "Slender body",
-      "Specialized feeder"
-    ],
-    "habitat": "Forests.",
-    "behavior": "Nocturnal and slow-moving.",
-    "ecological_role": "Controls snail populations.",
-    "safety": [
-      "Safe"
-    ]
+    "description": "A specialized snail-eating snake with a blunt head adapted for its diet. It is non-venomous and harmless to humans.",
+    "traits": ["Blunt head", "Slender body", "Specialized feeder"],
+    "habitat": "Forests, moist vegetation, and areas where snails are common.",
+    "behavior": "Nocturnal and slow-moving. Feeds mainly on snails and soft-bodied prey.",
+    "ecological_role": "Controls snail populations and contributes to ecological balance.",
+    "safety": ["Safe to observe", "Do not harm", "Avoid unnecessary handling"]
   },
 
   "Philippine_Bronzeback_Treesnake": {
     "common_name": "Philippine Bronzeback Tree Snake",
     "scientific_name": "Dendrelaphis philippinensis",
     "venom_type": "Non-venomous Snake",
+    "medical_importance": "Non-medically significant; harmless to humans.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Bronze or brown",
+      "secondary_color": "Greenish, yellowish, or pale underside",
+      "head_shape": "Narrow elongated head",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Very slender and long arboreal body",
+      "body_length": "0.8–1.5 meters",
+      "tail_characteristics": "Long and thin tail",
+      "pattern": "Bronze dorsal surface with subtle side stripes",
+      "eye_size": "Large eyes",
+      "distinct_features": [
+        "Bronze back coloration",
+        "Fast tree-dwelling movement",
+        "Long slender body",
+        "Diurnal activity"
+      ]
+    },
     "warning": "Harmless.",
-    "description": "A slender and fast tree-dwelling snake commonly seen in forested areas.",
-    "traits": [
-      "Slender",
-      "Fast",
-      "Arboreal"
-    ],
-    "habitat": "Forests.",
-    "behavior": "Active during the day.",
-    "ecological_role": "Controls insects and small animals.",
-    "safety": [
-      "Safe"
-    ]
+    "description": "A slender and fast tree-dwelling snake commonly seen in forested areas. It is non-venomous and not dangerous to humans.",
+    "traits": ["Slender", "Fast", "Arboreal"],
+    "habitat": "Forests, trees, shrubs, and vegetated areas.",
+    "behavior": "Active during the day. Quickly escapes when disturbed.",
+    "ecological_role": "Controls insects, frogs, lizards, and small animals.",
+    "safety": ["Safe to observe", "Do not capture unnecessarily"]
   },
 
   "Philippine_Cat_Snake": {
     "common_name": "Philippine Cat Snake",
     "scientific_name": "Boiga philippina",
     "venom_type": "Mildly Venomous Snake",
-    "warning": "Mild venom.",
-    "description": "A nocturnal arboreal snake with large eyes and slender body.",
-    "traits": [
-      "Large eyes",
-      "Slender body",
-      "Tree-dwelling"
-    ],
-    "habitat": "Forests.",
-    "behavior": "Nocturnal hunter.",
-    "ecological_role": "Controls small animals.",
+    "medical_importance": "Mildly medically significant; rear-fanged venom may cause mild local effects.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Brown or grayish brown",
+      "secondary_color": "Darker blotches or bands",
+      "head_shape": "Elongated head distinct from the neck",
+      "pupil_shape": "Vertical pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Long slender arboreal body",
+      "body_length": "0.8–1.5 meters",
+      "tail_characteristics": "Long tapering tail for climbing",
+      "pattern": "Brown body with darker irregular markings",
+      "eye_size": "Large eyes",
+      "distinct_features": [
+        "Large cat-like eyes",
+        "Vertical pupils",
+        "Slender tree-dwelling body",
+        "Nocturnal hunting behavior"
+      ]
+    },
+    "warning": "Warning: Mild venom. Avoid handling.",
+    "description": "A nocturnal arboreal snake with large eyes and a slender body. It is mildly venomous and should not be handled.",
+    "traits": ["Large eyes", "Slender body", "Tree-dwelling"],
+    "habitat": "Forests, trees, and thick vegetation.",
+    "behavior": "Nocturnal hunter that moves through branches in search of prey.",
+    "ecological_role": "Controls small animals, birds, lizards, and rodents.",
     "safety": [
-      "Avoid handling"
+      "Avoid handling",
+      "Do not provoke",
+      "Seek medical advice if bitten"
     ]
   },
 
@@ -243,19 +465,41 @@
     "common_name": "Philippine Cobra",
     "scientific_name": "Naja philippinensis",
     "venom_type": "Venomous Snake",
+    "medical_importance": "Highly medically significant; neurotoxic venom can be life-threatening and may affect breathing.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Light brown to olive brown",
+      "secondary_color": "Cream or pale underside",
+      "head_shape": "Broad head with expandable hood",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Slender to moderately thick body",
+      "body_length": "1.0–1.6 meters",
+      "tail_characteristics": "Thin tapering tail",
+      "pattern": "Mostly plain body with minimal banding",
+      "eye_size": "Medium eyes",
+      "distinct_features": [
+        "Expandable hood",
+        "Can spit venom",
+        "Raises front body when threatened",
+        "Plain brownish body coloration"
+      ]
+    },
     "warning": "Warning: Highly dangerous. Seek immediate medical attention if bitten.",
-    "description": "One of the most venomous snakes in the Philippines. Known for its ability to spit venom and its aggressive defensive behavior.",
+    "description": "One of the most venomous snakes in the Philippines. Known for its ability to spit venom and its strong defensive behavior.",
     "traits": [
       "Length: 1.0–1.6 meters",
       "Distinct hood",
       "Neurotoxic venom",
       "Can spit venom"
     ],
-    "habitat": "Lowlands, farms, and near water.",
-    "behavior": "Aggressive when threatened.",
-    "ecological_role": "Controls rodents.",
+    "habitat": "Lowlands, farms, grasslands, rice fields, and areas near water.",
+    "behavior": "Defensive when threatened. May raise its body, expand its hood, and spit venom toward the eyes.",
+    "ecological_role": "Controls rodents and other small animals.",
     "safety": [
       "Maintain distance",
+      "Do not attempt to capture",
+      "Protect eyes if venom is spat",
       "Seek emergency care if bitten"
     ]
   },
@@ -264,18 +508,36 @@
     "common_name": "Philippine Pitviper",
     "scientific_name": "Trimeresurus flavomaculatus",
     "venom_type": "Venomous Snake",
-    "warning": "Venomous.",
-    "description": "A green arboreal pit viper known for its camouflage and ambush hunting style.",
-    "traits": [
-      "Green body",
-      "Triangular head",
-      "Heat pits"
-    ],
-    "habitat": "Forests.",
-    "behavior": "Ambush predator.",
-    "ecological_role": "Controls small animals.",
+    "medical_importance": "Medically significant; venom may cause pain, swelling, tissue damage, and systemic effects.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Green",
+      "secondary_color": "Yellow, white, or reddish markings depending on individual variation",
+      "head_shape": "Triangular head clearly wider than the neck",
+      "pupil_shape": "Vertical pupils",
+      "scale_texture": "Keeled or rough-textured scales",
+      "body_shape": "Moderately thick arboreal body",
+      "body_length": "60–100 cm",
+      "tail_characteristics": "Prehensile tail used for gripping branches",
+      "pattern": "Green body with variable side markings or spots",
+      "eye_size": "Medium eyes",
+      "distinct_features": [
+        "Triangular head",
+        "Heat-sensing pits",
+        "Green camouflage",
+        "Ambush posture on branches"
+      ]
+    },
+    "warning": "Warning: Venomous. Avoid contact.",
+    "description": "A green arboreal pit viper known for camouflage and ambush hunting. It uses heat-sensing pits to locate prey.",
+    "traits": ["Green body", "Triangular head", "Heat pits"],
+    "habitat": "Forests, shrubs, and vegetation where it can rest on branches.",
+    "behavior": "Ambush predator. Often remains still and camouflaged while waiting for prey.",
+    "ecological_role": "Controls frogs, lizards, birds, and small mammals.",
     "safety": [
-      "Avoid contact"
+      "Avoid contact",
+      "Do not touch vegetation blindly",
+      "Seek medical attention if bitten"
     ]
   },
 
@@ -283,18 +545,36 @@
     "common_name": "Red-tailed Green Ratsnake",
     "scientific_name": "Gonyosoma oxycephalum",
     "venom_type": "Non-venomous Snake",
-    "warning": "Harmless.",
-    "description": "A large green snake with a distinctive red tail. Non-venomous but may bite defensively.",
-    "traits": [
-      "Green body",
-      "Red tail",
-      "Slender and long"
-    ],
-    "habitat": "Forests.",
-    "behavior": "Active climber.",
-    "ecological_role": "Controls rodents.",
+    "medical_importance": "Non-medically significant; non-venomous but may bite defensively.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Bright green",
+      "secondary_color": "Red or reddish-brown tail",
+      "head_shape": "Elongated head slightly distinct from the neck",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Long slender but muscular body",
+      "body_length": "1.5–2.4 meters",
+      "tail_characteristics": "Distinct red or reddish tail",
+      "pattern": "Mostly plain green body with contrasting red tail",
+      "eye_size": "Large eyes",
+      "distinct_features": [
+        "Bright green body",
+        "Red tail",
+        "Large eyes",
+        "Strong arboreal climbing ability"
+      ]
+    },
+    "warning": "Harmless, but large individuals may bite defensively if provoked.",
+    "description": "A large green snake with a distinctive red tail. It is non-venomous but may bite defensively when threatened.",
+    "traits": ["Green body", "Red tail", "Slender and long"],
+    "habitat": "Forests, trees, plantations, and areas near vegetation.",
+    "behavior": "Active climber and fast-moving snake. May become defensive when cornered.",
+    "ecological_role": "Controls rodents, birds, and small animals.",
     "safety": [
-      "Safe to observe"
+      "Safe to observe from a distance",
+      "Do not provoke",
+      "Avoid handling large individuals"
     ]
   },
 
@@ -302,18 +582,36 @@
     "common_name": "Reinhardt's Lined Snake",
     "scientific_name": "Calamaria schlegeli",
     "venom_type": "Non-venomous Snake",
+    "medical_importance": "Non-medically significant; harmless to humans.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Brown or dark brown",
+      "secondary_color": "Light stripes or pale underside",
+      "head_shape": "Small rounded head",
+      "pupil_shape": "Round pupils",
+      "scale_texture": "Smooth shiny scales",
+      "body_shape": "Small cylindrical burrowing body",
+      "body_length": "20–50 cm",
+      "tail_characteristics": "Short tail",
+      "pattern": "Lined or striped body pattern",
+      "eye_size": "Small eyes",
+      "distinct_features": [
+        "Small body size",
+        "Lined body pattern",
+        "Burrowing lifestyle",
+        "Smooth shiny scales"
+      ]
+    },
     "warning": "Harmless.",
-    "description": "A small burrowing snake with a lined pattern, rarely seen above ground.",
-    "traits": [
-      "Small size",
-      "Striped body",
-      "Burrowing"
-    ],
-    "habitat": "Soil and forests.",
-    "behavior": "Secretive.",
-    "ecological_role": "Controls insects.",
+    "description": "A small burrowing snake with a lined pattern. It is rarely seen above ground and is harmless to humans.",
+    "traits": ["Small size", "Striped body", "Burrowing"],
+    "habitat": "Soil, forests, leaf litter, and areas under rocks or logs.",
+    "behavior": "Secretive and mostly hidden underground or under debris.",
+    "ecological_role": "Controls insects and small invertebrates.",
     "safety": [
-      "Safe"
+      "Safe to observe",
+      "Do not kill",
+      "Relocate gently if found indoors"
     ]
   },
 
@@ -321,19 +619,37 @@
     "common_name": "Reticulated Python",
     "scientific_name": "Malayopython reticulatus",
     "venom_type": "Non-venomous Snake",
-    "warning": "Large constrictor. Dangerous if provoked.",
-    "description": "One of the longest snakes in the world, known for its powerful constriction and striking pattern.",
-    "traits": [
-      "Length: up to 7 meters",
-      "Muscular body",
-      "Complex pattern"
-    ],
-    "habitat": "Forests, rivers, and wetlands.",
-    "behavior": "Ambush predator.",
-    "ecological_role": "Controls large prey populations.",
+    "medical_importance": "Non-venomous but physically dangerous because of size and constriction strength.",
+    "confidence_note": "Identification may vary depending on image quality, lighting conditions, viewing angle, and partial body visibility.",
+    "identification": {
+      "primary_color": "Brown or tan",
+      "secondary_color": "Black, yellow, and gray markings",
+      "head_shape": "Long broad head distinct from the neck",
+      "pupil_shape": "Vertical pupils",
+      "scale_texture": "Smooth scales",
+      "body_shape": "Very long, thick, and muscular body",
+      "body_length": "3–7 meters",
+      "tail_characteristics": "Strong tapering tail",
+      "pattern": "Complex net-like reticulated pattern",
+      "eye_size": "Medium eyes",
+      "distinct_features": [
+        "Very large body size",
+        "Complex reticulated pattern",
+        "Powerful constrictor",
+        "Long muscular body"
+      ]
+    },
+    "warning": "Large constrictor. Dangerous if provoked, especially large individuals.",
+    "description": "One of the longest snakes in the world, known for its powerful constriction and complex net-like body pattern.",
+    "traits": ["Length: up to 7 meters", "Muscular body", "Complex pattern"],
+    "habitat": "Forests, rivers, wetlands, grasslands, and sometimes near human settlements.",
+    "behavior": "Ambush predator. Usually avoids humans but can be dangerous if large and threatened.",
+    "ecological_role": "Controls large prey populations including rodents and other animals.",
     "safety": [
       "Avoid large individuals",
-      "Do not approach"
+      "Do not approach",
+      "Call trained handlers for removal",
+      "Keep children and pets away"
     ]
   }
 }
